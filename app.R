@@ -2,6 +2,7 @@ library(shiny)
 library(shinydashboard)
 library(dplyr)
 library(ggplot2)
+library(corrplot)
 
 ui <- dashboardPage(
   dashboardHeader(
@@ -52,8 +53,56 @@ ui <- dashboardPage(
         # add some graphs for the dataset
         fluidRow(
           box(
-            title='Feature Exploration', solidHeader=TRUE, width=12, status='info',
-            helpText("Fortnite battle pass")
+            width=12,
+            helpText("You may select from several features to view their distrbution. You may also
+                     view a correlation plot of all the dataset's features to understand how they
+                     interact with each one another. This is particularly useful for determining
+                     which features to keep and which features to remove in data preprocessing and
+                     model training.")
+          )
+        ),
+        fluidRow(
+          box(
+            title='Interactive Data Table', solidHeader=TRUE, width=12, status='success',
+            tableOutput('dataTable')
+          )
+        ),
+        fluidRow(
+          box(
+            title = "Correlation Matrix", solidHeader=TRUE, width=12, status='warning',
+            # correlation matrix
+            plotOutput("correlationPlot"),
+          )
+        ),
+        fluidRow(
+          box(
+            title='Feature Exploration', solidHeader=TRUE, width=12, status='primary',
+            # users can select features and see their distribution
+            selectInput('featureSelectInput', 'Select Feature to See Distribution: ', choices=c(
+              "ACRS Report Type" = 'acrsReportType',
+              'Crash Date/Time' = 'crashDateTime',
+              'Route Type' = 'routeType',
+              'Collision Type' = 'collisionType',
+              'Weather' = 'weather',
+              'Surface Condition' = 'surfaceCondition',
+              'Light' = 'light',
+              'Traffic Control' = 'trafficControl',
+              'Driver Substance Abuse' = 'driverSubstanceAbuse',
+              'Driver At Fault' = 'driverAtFault',
+              'Injury Severity' = 'injurySeverity',
+              'Driver Distracted By' = 'driverDistractedBy',
+              'Vehicle Damage Extent' = 'vehicleDamageExtent',
+              'Vehicle First Impact Location' = 'vehicleFirstImpactLocation',
+              'Vehicle Body Type' = 'vehicleBodyType',
+              'Vehicle Movement' = 'vehicleMovement',
+              'Speed Limit' = 'speedLimit',
+              'Driverless Vehicle' = 'driverlessVehicle',
+              'Parked Vehicle' = 'parkedVehicle'
+            )),
+            # distribution plot
+            plotOutput("normalDistributionPlot"),
+            br(), br(),
+            plotOutput("groupedDistributionPlot")
           )
         )
       ),
