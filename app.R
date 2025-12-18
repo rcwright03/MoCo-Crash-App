@@ -5,7 +5,14 @@ library(ggplot2)
 
 ui <- dashboardPage(
   dashboardHeader(
-    title = ""
+    title = "MoCo Crash Classification",
+    # custom css to make the whole title fit
+    tags$li(class = "dropdown",
+            tags$style(".main-header .logo {
+                         font-size: 14px; /* Adjust the font size as needed */
+                         font-weight: bold;
+                       }")
+    )
   ),
   dashboardSidebar(
     sidebarMenu(
@@ -21,15 +28,34 @@ ui <- dashboardPage(
       tabItem(
         tabName="aboutTab",
         # talk about the dataset and why the project exists
-        # add some graphs for the dataset
         fluidRow(
           box(
-            helpText("Fortnite battle pass")
+            title="Dataset Description", solidHeader=TRUE, width=12, status='info',
+            helpText("This app uses car crash data from the Montgomery County Crash Reporting - Drivers Dataset, which
+                     can be found here: https://data.montgomerycountymd.gov/Public-Safety/Crash-Reporting-Drivers-Data/mmzv-x632/about_data. 
+                     The original dataset has 39 columns, including but not limited to the surface conditions, weather, light, speed limit, and vehicle body type. 
+                     Many features were removed from the dataset due to being unnecessary and adding noise. The full list of removed features
+                     includes the following: (LIST FEATURES THAT WERE REMOVED).",
+                     br(), br(), 
+                     "The purpose of this app is to determine which models are most effective at classifying crashes by injury severity, report type 
+                     (property damage, injury, fatal), and vehicle damage extent. This can be used to help determine how to help those who get in car
+                     crashes before reports are taken.",
+                     br(), br(),
+                     "This app takes users through the data science lifecycle, with pages that make data exploration, data preprocessing, 
+                     model selection and tuning, and model visualization seamless.")
+                     
           )
         )
       ),
       tabItem(
-        tabName="dataTab"
+        tabName="dataTab",
+        # add some graphs for the dataset
+        fluidRow(
+          box(
+            title='Feature Exploration', solidHeader=TRUE, width=12, status='info',
+            helpText("Fortnite battle pass")
+          )
+        )
       ),
       tabItem(
         tabName="preprocessingTab",
