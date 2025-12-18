@@ -113,9 +113,8 @@ ui <- dashboardPage(
             title='Data Preprocessing Options', solidHeader=TRUE, width=12, status='info',
             sliderInput("trainingInput", "Select Training Set Size (%):", min=50, max=90, value=80, step=5),
             sliderInput('totalDataInput', 'Select Total Data Size (# Rows):', min=5000, max=200000, value=20000, step=5000),
-            checkboxInput("outlierCheck", "Remove Outliers", FALSE),
             checkboxInput("normalizeCheck", "Normalize Numerical Values", FALSE),
-            checkboxInput("missingCheck", "Handle Missing Values (Imputation)", FALSE),
+            checkboxInput("missingCheck", "Handle Missing, N/A, and Unknown Values (Imputation)", FALSE),
             checkboxInput("validationCheck", "Use Validation Set", FALSE),
             selectInput("variableSelection", "Select Target Variable:", choices=c(
               "ACRS Report Type" = 'reportType',
