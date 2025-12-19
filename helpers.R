@@ -58,30 +58,9 @@ print(nrow(crash_df))
 handle_missing_vals(crash_df, FALSE)
 print(nrow(crash_df))
 
-# group features that need to be grouped
-# grouped_crash_df <- crash_df %>%
-#   mutate(
-#     # parse date time col
-#     Crash_DateTime = mdy_hms(Crash.Date.Time, tz='UTC'),
-#     # group by quarter
-#     Crash_Quarter = case_when(
-#       quarter(Crash_DateTime) == 1 ~ "Q1",
-#       quarter(Crash_DateTime) == 2 ~ "Q2",
-#       quarter(Crash_DateTime) == 3 ~ "Q3",
-#       quarter(Crash_DateTime) == 4 ~ "Q4"
-#     ),
-#     # group by time
-#     Time_of_day = case_when(
-#       hour(Crash_DateTime) >= 0 & hour(Crash_DateTime) < 6 ~ "12:00AM - 5:59AM",
-#       hour(Crash_DateTime) >= 6 & hour(Crash_DateTime) < 12 ~ "6:00AM - 11:59PM",
-#       hour(Crash_DateTime) >= 12 & hour(Crash_DateTime) < 18 ~ "12:00PM - 5:59PM",
-#       hour(Crash_DateTime) >= 18 & hour(Crash_DateTime) < 24 ~ "6:00AM - 11:59PM"
-#     )
-#   ) %>%
-#   select(Crash_Quarter, Time_of_day)
-
+# group columns
 grouped_crash_df <- crash_df %>%
-  transmute(
+  mutate(
     Crash_DateTime = as.POSIXct(
       Crash.Date.Time,
       format = "%m/%d/%Y %H:%M",
@@ -96,24 +75,8 @@ grouped_crash_df <- crash_df %>%
       hour(Crash_DateTime) >= 12 & hour(Crash_DateTime) < 18 ~ "12:00PM - 5:59PM",
       hour(Crash_DateTime) >= 18 & hour(Crash_DateTime) < 24 ~ "6:00PM - 11:59PM",
       TRUE ~ NA_character_
-    )
-  )
-
-# sanity checks
-# crashQuarterTable <- table(grouped_crash_df$Crash_Quarter)
-# print(crashQuarterTable)
-# crashTimeTable <- table(grouped_crash_df$Time_of_day)
-# print(crashTimeTable)
-# check that there are 0 NA values
-# sum(is.na(as.POSIXct(
-#   crash_df$Crash.Date.Time,
-#   format = "%m/%d/%Y %H:%M"
-# )))
-# head(grouped_crash_df)
-
-# group route type
-grouped_crash_df <- crash_df %>%
-  mutate(
+    ),
+    
     Route_Type_Grouped = case_when(
       Route.Type %in% c("interstate (state)") ~ "Interstate",
       Route.Type %in% c("maryland (state) route", "maryland (state)", "us (state)") ~ "US/State Route",
@@ -123,12 +86,8 @@ grouped_crash_df <- crash_df %>%
       Route.Type %in% c("other public roadway", "private route", "bicycle route") ~ "Other/Private",
       Route.Type %in% c("unknown") ~ "Unknown",
       TRUE ~ "Other"  # catch any unexpected values
-    )
-  )
-
-# group weather
-grouped_crash_df <- crash_df %>%
-  mutate(
+    ),
+    
     Weather_Grouped = case_when(
       Weather %in% c("rain", "raining", "freezing rain or freezing drizzle") ~ "Rain",
       Weather %in% c("snow", "sleet or hail", "sleet", "wintry mix", "blowing snow") ~ "Snow/Sleet",
@@ -137,12 +96,8 @@ grouped_crash_df <- crash_df %>%
       Weather %in% c("severe crosswinds", "severe winds", "blowing sand, soil, dirt") ~ "Severe Winds",
       Weather %in% c("unknown", "n/a", "other") ~ "Unknown/Other",
       TRUE ~ "Other"
-    )
-  )
-
-# group surface conditions
-grouped_crash_df <- crash_df %>%
-  mutate(
+    ),
+    
     Surface_Condition_Grouped = case_when(
       Surface.Condition %in% c("dry", "0") ~ "Dry",
       Surface.Condition %in% c("wet", "water (standing, moving)", "water(standing/moving)") ~ "Wet",
@@ -150,12 +105,8 @@ grouped_crash_df <- crash_df %>%
       Surface.Condition %in% c("mud, dirt, gravel", "sand", "oil") ~ "Mud/Dirt/Gravel",
       Surface.Condition %in% c("other", "n/a", "unknown") ~ "Unknown/Other",
       TRUE ~ "Other"
-    )
-  )
-
-# group light
-grouped_crash_df <- crash_df %>%
-  mutate(
+    ),
+    
     Light_Grouped = case_when(
       Light %in% c("daylight") ~ "Daylight",
       Light %in% c("dark - lighted", "dark lights on", "dark no lights") ~ "Dark - Lighted",
@@ -163,12 +114,8 @@ grouped_crash_df <- crash_df %>%
       Light %in% c("dawn", "dusk") ~ "Dawn/Dusk",
       Light %in% c("dark - unknown lighting", "dark -- unknown lighting", "other", "unknown", "n/a") ~ "Unknown/Other",
       TRUE ~ "Other"
-    )
-  )
-
-# group traffic control
-grouped_crash_df <- crash_df %>%
-  mutate(
+    ),
+    
     Traffic_Control_Grouped = case_when(
       Traffic.Control %in% c("no controls", "0") ~ "No Control",
       Traffic.Control %in% c("stop sign", "yield sign") ~ "Stop/Yield",
@@ -184,12 +131,8 @@ grouped_crash_df <- crash_df %>%
       Traffic.Control %in% c("person (including flagger, law enforcement, crossing guard, etc.)", "person") ~ "Person/Flagger",
       Traffic.Control %in% c("other", "n/a", "unknown", "warning sign") ~ "Unknown/Other",
       TRUE ~ "Other"
-    )
-  )
-
-# group driver substance abuse column
-grouped_crash_df <- crash_df %>%
-  mutate(
+    ),
+    
     Driver_Substance_Grouped = case_when(
       Driver.Substance.Abuse %in% c("not suspect of alcohol use, not suspect of drug use", "none detected") ~ "No Substance Detected",
       Driver.Substance.Abuse %in% c("suspect of alcohol use, not suspect of drug use", "suspect of alcohol use, unknown",
@@ -202,12 +145,8 @@ grouped_crash_df <- crash_df %>%
                                     "unknown, suspect of drug use", "not suspect of alcohol use, unknown",
                                     "other", "unknown", "n/a") ~ "Unknown/Other",
       TRUE ~ "Other"
-    )
-  )
-
-# group driver distracted by col
-grouped_crash_df <- crash_df %>%
-  mutate(
+    ),
+    
     Driver_Distracted_Grouped = case_when(
       Driver.Distracted.By %in% c("not distracted", "0", "no driver present") ~ "Not Distracted",
       Driver.Distracted.By %in% c("talking/listening", "talking or listening to cellular phone",
@@ -222,12 +161,8 @@ grouped_crash_df <- crash_df %>%
                                   "distracted by outside person object or event", "by other occupants") ~ "Looked/Inattentive/External",
       Driver.Distracted.By %in% c("unknown", "other", "other action (looking away from task, etc.)") ~ "Unknown/Other",
       TRUE ~ "Other"
-    )
-  )
-
-# group vehicle first impact location
-grouped_crash_df <- crash_df %>%
-  mutate(
+    ),
+    
     First_Impact_Grouped = case_when(
       Vehicle.First.Impact.Location %in% c("12 o clock", "12 oclock") ~ "Front",
       Vehicle.First.Impact.Location %in% c("1 o clock", "2 o clock", "1 oclock", "2 oclock") ~ "Front-Right",
@@ -243,12 +178,8 @@ grouped_crash_df <- crash_df %>%
       Vehicle.First.Impact.Location %in% c("vehicle not at scene") ~ "Vehicle Not at Scene",
       Vehicle.First.Impact.Location %in% c("unknown", "0") ~ "Unknown/Other",
       TRUE ~ "Other"
-    )
-  )
-
-# group vehicle movement column
-grouped_crash_df <- crash_df %>%
-  mutate(
+    ),
+    
     Vehicle_Movement_Grouped = case_when(
       Vehicle.Movement %in% c("moving constant speed", "entering traffic lane", "accelerating",
                               "starting from lane", "driverless moving veh.") ~ "Moving Straight/Constant",
@@ -260,114 +191,77 @@ grouped_crash_df <- crash_df %>%
       Vehicle.Movement %in% c("negotiating a curve", "skidding") ~ "Negotiating Curve/Skidding",
       Vehicle.Movement %in% c("0", "unknown", "n/a", "other") ~ "Unknown/Other",
       TRUE ~ "Other"
-    )
-  )
-
-print(table(grouped_crash_df$Vehicle_Movement_Grouped))
-
-# vehicle body type grouping
-grouped_crash_df <- crash_df %>%
-  mutate(Vehicle.Body.Type.Grouped = case_when(
-    Vehicle.Body.Type %in% c(
-      "passenger car", "station wagon", "limousine"
-    ) ~ "Passenger Car",
+    ),
     
-    Vehicle.Body.Type %in% c(
-      "(sport) utility vehicle", "sport utility vehicle",
-      "pickup", "pickup truck",
-      "cargo van/light truck 2 axles (over 10,000lbs (4,536 kg))",
-      "van", "van - cargo",
-      "van - passenger (<9 seats)", "van - passenger (9 or 12 seats)",
-      "other light trucks (10,000lbs (4,536 kg) or less)",
-      "recreational off-highway vehicles (rov)"
-    ) ~ "SUV/Van/Light Pickup",
+    Vehicle_Body_Type_Grouped = case_when(
+      Vehicle.Body.Type %in% c("passenger car", "station wagon", "limousine") ~ "Passenger Car",
+      Vehicle.Body.Type %in% c("(sport) utility vehicle", "sport utility vehicle", "pickup", "pickup truck",
+                               "cargo van/light truck 2 axles (over 10,000lbs (4,536 kg))", "van",
+                               "van - cargo", "van - passenger (<9 seats)", "van - passenger (9 or 12 seats)",
+                               "other light trucks (10,000lbs (4,536 kg) or less)", "recreational off-highway vehicles (rov)"
+                               ) ~ "SUV/Van/Light Pickup",
+      Vehicle.Body.Type %in% c("medium/heavy trucks 3 axles (over 10,000lbs (4,536 kg))", "single-unit truck",
+                               "other trucks", "truck tractor") ~ "Heavy Truck",
+      Vehicle.Body.Type %in% c("motorcycle", "motorcycle - 2 wheeled", "motorcycle - 3 wheeled", "moped",
+                               "moped or motorized bicycle", "all terrain vehicle (atv)", "autocycle",
+                               "all-terrain vehicle/all-terrain cycle (atv/atc)") ~ "Motorcycle/ATV",
+      Vehicle.Body.Type %in% c("bus - mini", "bus - other type", "bus - school", "bus - transit",
+                               "cross country bus", "other bus", "school bus", "transit bus") ~ "Bus",
+      Vehicle.Body.Type %in% c("ambulance/emergency", "ambulance/non emergency", "fire vehicle/emergency",
+                               "fire vehicle/non emergency", "police vehicle/emergency", "police vehicle/non emergency") ~ "Emergency",
+      Vehicle.Body.Type %in% c("recreational vehicle", "farm vehicle", "low speed vehicle", "snowmobile"
+                               ) ~ "Other/Off-Road",
+      TRUE ~ "Other"
+    ),
     
-    Vehicle.Body.Type %in% c(
-      "medium/heavy trucks 3 axles (over 10,000lbs (4,536 kg))",
-      "single-unit truck", "other trucks", "truck tractor"
-    ) ~ "Heavy Truck",
+    Collision_Type_Grouped = case_when(
+      Collision.Type %in% c("front to rear", "same dir rear end", "same dir rend left turn",
+                            "same dir rend right turn") ~ "Rear-End",
+      Collision.Type %in% c("head on", "front to front") ~ "Head-On",
+      Collision.Type %in% c("angle", "angle meets left head on", "angle meets left turn",
+                            "angle meets right turn", "straight movement angle") ~ "Angle",
+      Collision.Type %in% c("opposite direction sideswipe", "same direction sideswipe",
+                            "sideswipe, opposite direction", "sideswipe, same direction") ~ "Sideswipe",
+      Collision.Type %in% c("same dir both left turn", "same direction left turn", "same direction right turn",
+                            "head on left turn", "opposite dir both left turn") ~ "Turn Conflict",
+      Collision.Type %in% c("single vehicle") ~ "Single Vehicle",
+      TRUE ~ "Other"
+    ),
     
-    Vehicle.Body.Type %in% c(
-      "motorcycle", "motorcycle - 2 wheeled", "motorcycle - 3 wheeled",
-      "moped", "moped or motorized bicycle",
-      "all terrain vehicle (atv)", 
-      "all-terrain vehicle/all-terrain cycle (atv/atc)", "autocycle"
-    ) ~ "Motorcycle/ATV",
-    
-    Vehicle.Body.Type %in% c(
-      "bus - mini", "bus - other type", "bus - school", "bus - transit",
-      "cross country bus", "other bus", "school bus", "transit bus"
-    ) ~ "Bus",
-    
-    Vehicle.Body.Type %in% c(
-      "ambulance/emergency", "ambulance/non emergency",
-      "fire vehicle/emergency", "fire vehicle/non emergency",
-      "police vehicle/emergency", "police vehicle/non emergency"
-    ) ~ "Emergency",
-    
-    Vehicle.Body.Type %in% c(
-      "recreational vehicle", "farm vehicle", 
-      "low speed vehicle", "snowmobile"
-    ) ~ "Other/Off-Road",
-    
-    TRUE ~ "Other"
-  ))
-
-# collision type grouping
-grouped_crash_df <- crash_df %>%
-  mutate(Collision.Type.Grouped = case_when(
-    Collision.Type %in% c(
-      "front to rear", "same dir rear end", 
-      "same dir rend left turn", "same dir rend right turn"
-    ) ~ "Rear-End",
-    
-    Collision.Type %in% c(
-      "head on", "front to front"
-    ) ~ "Head-On",
-    
-    Collision.Type %in% c(
-      "angle", "angle meets left head on",
-      "angle meets left turn", "angle meets right turn",
-      "straight movement angle"
-    ) ~ "Angle",
-    
-    Collision.Type %in% c(
-      "opposite direction sideswipe", "same direction sideswipe",
-      "sideswipe, opposite direction", "sideswipe, same direction"
-    ) ~ "Sideswipe",
-    
-    Collision.Type %in% c(
-      "same dir both left turn", "same direction left turn",
-      "same direction right turn", "head on left turn",
-      "opposite dir both left turn"
-    ) ~ "Turn Conflict",
-    
-    Collision.Type %in% c("single vehicle") ~ "Single Vehicle",
-    
-    TRUE ~ "Other"
-  ))
-
-grouped_crash_df <- crash_df %>%
-  mutate(
     Speed_Limit = case_when(
       Speed.Limit < 15 & Speed.Limit >= 0 ~ '0-15',
       Speed.Limit < 30 & Speed.Limit >= 15 ~ '15-30',
       Speed.Limit < 45 & Speed.Limit >= 30 ~ '30-45',
       Speed.Limit < 60 & Speed.Limit >= 45 ~ '45-60',
       Speed.Limit >= 60 ~ '60+'
-    )
-  )
+    ),
+    
+    ACRS_Report_Type = ACRS.Report.Type,
+    Injury_Severity = Injury.Severity,
+    Vehicle_Damage_Extent = Vehicle.Damage.Extent,
+    Driverless_Vehicle = Driverless.Vehicle,
+    Parked_Vehicle = Parked.Vehicle
+  ) %>%
+  select(Crash_Quarter, Time_of_day, Route_Type_Grouped, Weather_Grouped, Surface_Condition_Grouped,
+         Light_Grouped, Traffic_Control_Grouped, Driver_Substance_Grouped, Driver_Distracted_Grouped,
+         First_Impact_Grouped, Vehicle_Movement_Grouped, Vehicle_Body_Type_Grouped, Collision_Type_Grouped,
+         Speed_Limit, ACRS_Report_Type, Injury_Severity, Vehicle_Damage_Extent, Driverless_Vehicle,
+         Parked_Vehicle)
 
-# retrieve other columns that don't need to be grouped
-grouped_crash_df <- subset(crash_df, select = c(
-  `ACRS.Report.Type`,
-  `Injury.Severity`,
-  `Vehicle.Damage.Extent`,
-  `Driverless.Vehicle`,
-  `Parked.Vehicle`
-))
+head(grouped_crash_df)
 
-#head(grouped_crash_df)
+# sanity checks
+# crashQuarterTable <- table(grouped_crash_df$Crash_Quarter)
+# print(crashQuarterTable)
+# crashTimeTable <- table(grouped_crash_df$Time_of_day)
+# print(crashTimeTable)
+# check that there are 0 NA values
+# sum(is.na(as.POSIXct(
+#   crash_df$Crash.Date.Time,
+#   format = "%m/%d/%Y %H:%M"
+# )))
+
+# sanity check for number of rows and cols
 crash_df_ncol <- ncol(crash_df)
 crash_df_nrow <- nrow(crash_df)
 grouped_crash_df_ncol <- ncol(grouped_crash_df)
