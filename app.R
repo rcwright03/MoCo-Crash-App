@@ -3,6 +3,8 @@ library(shinydashboard)
 library(dplyr)
 library(ggplot2)
 library(corrplot)
+library(DT)
+source('helpers.R')
 
 ui <- dashboardPage(
   dashboardHeader(
@@ -64,7 +66,7 @@ ui <- dashboardPage(
         fluidRow(
           box(
             title='Interactive Data Table', solidHeader=TRUE, width=12, status='success',
-            tableOutput('dataTable')
+            DTOutput('grouped_crash_table')
           )
         ),
         fluidRow(
@@ -79,24 +81,23 @@ ui <- dashboardPage(
             title='Feature Exploration', solidHeader=TRUE, width=12, status='primary',
             # users can select features and see their distribution
             selectInput('featureSelectInput', 'Select Feature to See Distribution: ', choices=c(
-              "ACRS Report Type" = 'acrsReportType',
-              'Crash Date/Time' = 'crashDateTime',
-              'Route Type' = 'routeType',
-              'Collision Type' = 'collisionType',
-              'Weather' = 'weather',
-              'Surface Condition' = 'surfaceCondition',
-              'Light' = 'light',
-              'Traffic Control' = 'trafficControl',
-              'Driver Substance Abuse' = 'driverSubstanceAbuse',
-              'Driver At Fault' = 'driverAtFault',
+              'Crash_Quarter' = 'crashQuarter',
+              'Time_of_day' = 'timeOfDay',
+              'Route_Type_Grouped' = 'routeType',
+              'Weather_Grouped' = 'weather',
+              'Surface_Condition_Grouped' = 'surfaceCondition',
+              'Light_Grouped' = 'light',
+              'Traffic_Control_Grouped' = 'trafficControl',
+              'Driver_Substance_Grouped' = 'driverSubstanceAbuse',
+              'Driver_Distracted_Grouped' = 'driverDistractedBy',
+              'First_Impact_Grouped' = 'vehicleFirstImpactLocation',
+              'Vehicle_Movement_Grouped' = 'vehicleMovement',
+              'Vehicle_Body_Type_Grouped' = 'vehicleBodyType',
+              'Collision_Type_Grouped' = 'collisionType',
+              'Speed_Limit_Grouped' = 'speedLimit',
+              "ACRS_Report_Type" = 'acrsReportType',
               'Injury Severity' = 'injurySeverity',
-              'Driver Distracted By' = 'driverDistractedBy',
               'Vehicle Damage Extent' = 'vehicleDamageExtent',
-              'Vehicle First Impact Location' = 'vehicleFirstImpactLocation',
-              'Vehicle Body Type' = 'vehicleBodyType',
-              'Vehicle Movement' = 'vehicleMovement',
-              'Speed Limit' = 'speedLimit',
-              'Driverless Vehicle' = 'driverlessVehicle',
               'Parked Vehicle' = 'parkedVehicle'
             )),
             # distribution plot
@@ -186,7 +187,23 @@ ui <- dashboardPage(
 )
 
 server <- function(input, output) {
-  
+  output$grouped_crash_table <- renderDT({
+    datatable(grouped_crash_df,
+              options=list(pagelength=10,
+                           scrollX=TRUE,
+                           autowidth=TRUE,
+                           search=list(regex=FALSE, caseInsensitive=TRUE),
+                           searchCols=NULL),
+              filter='top',
+              caption=htmltools::tags$caption(
+                style='caption-side: top; text-align: left; font-size: 14px;', 'This table uses grouped
+              features to simplify the search process. Search globally (located top right) or use column
+              filters.')
+              )
+  })
+  output$correlationPlot <- renderPlot({
+    grouped_heatmap
+  })
 }
 
 shinyApp(ui, server)

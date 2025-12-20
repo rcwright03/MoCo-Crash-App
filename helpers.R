@@ -2,6 +2,8 @@
 library(dplyr)
 library(lubridate)
 library(tidyr)
+library(DescTools)
+library(reshape2)
 
 crash_df = read.csv("Data/crash_data_truncated.csv")
 
@@ -239,14 +241,15 @@ grouped_crash_df <- crash_df %>%
     ACRS_Report_Type = ACRS.Report.Type,
     Injury_Severity = Injury.Severity,
     Vehicle_Damage_Extent = Vehicle.Damage.Extent,
-    Driverless_Vehicle = Driverless.Vehicle,
     Parked_Vehicle = Parked.Vehicle
   ) %>%
   select(Crash_Quarter, Time_of_day, Route_Type_Grouped, Weather_Grouped, Surface_Condition_Grouped,
          Light_Grouped, Traffic_Control_Grouped, Driver_Substance_Grouped, Driver_Distracted_Grouped,
          First_Impact_Grouped, Vehicle_Movement_Grouped, Vehicle_Body_Type_Grouped, Collision_Type_Grouped,
-         Speed_Limit, ACRS_Report_Type, Injury_Severity, Vehicle_Damage_Extent, Driverless_Vehicle,
-         Parked_Vehicle)
+         Speed_Limit, ACRS_Report_Type, Injury_Severity, Vehicle_Damage_Extent, Parked_Vehicle)
+
+grouped_crash_df <- grouped_crash_df %>%
+  mutate(across(everything(), as.factor))
 
 head(grouped_crash_df)
 
@@ -262,11 +265,52 @@ head(grouped_crash_df)
 # )))
 
 # sanity check for number of rows and cols
-crash_df_ncol <- ncol(crash_df)
-crash_df_nrow <- nrow(crash_df)
-grouped_crash_df_ncol <- ncol(grouped_crash_df)
-grouped_crash_df_nrow <- nrow(grouped_crash_df)
-print(crash_df_ncol)
-print(crash_df_nrow)
-print(grouped_crash_df_ncol)
-print(grouped_crash_df_nrow)
+# crash_df_ncol <- ncol(crash_df)
+# crash_df_nrow <- nrow(crash_df)
+# grouped_crash_df_ncol <- ncol(grouped_crash_df)
+# grouped_crash_df_nrow <- nrow(grouped_crash_df)
+# print(crash_df_ncol)
+# print(crash_df_nrow)
+# print(grouped_crash_df_ncol)
+# print(grouped_crash_df_nrow)
+
+# create correlation matrix using cramers V
+cramers_v_matrix <- function(df) {
+  vars <- colnames(df)
+  n <- length(vars)
+  
+  mat <- matrix(NA, n, n)
+  colnames(mat) <- rownames(mat) <- vars
+  
+  for (i in seq_len(n)) {
+    for (j in seq_len(n)) {
+      mat[i, j] <- CramerV(
+        table(df[[i]], df[[j]]),
+        bias.correct = TRUE
+      )
+    }
+  }
+  
+  mat
+}
+
+corr_mat <- cramers_v_matrix(grouped_crash_df)
+corr_long <- melt(corr_mat)
+grouped_heatmap <- ggplot(corr_long, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  geom_text(
+    aes(label = sprintf("%.2f", value)),
+    size = 3,
+    color = "black"
+  ) +
+  scale_fill_viridis_c(limits = c(0, 1)) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.title = element_blank()
+  ) +
+  labs(fill = "Cramér's V")
+
+create_distribution_plot(df, column) {
+  return(barplot(df$column, xlab="Values", ylab="Frequency", main="Frequency Distribution Graph"))
+}
