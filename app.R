@@ -113,11 +113,9 @@ ui <- dashboardPage(
           box(
             title='Data Preprocessing Options', solidHeader=TRUE, width=12, status='info',
             sliderInput("trainingInput", "Select Training Set Size (%):", min=50, max=90, value=80, step=5),
-            sliderInput('totalDataInput', 'Select Total Data Size (# Rows):', min=5000, max=200000, value=20000, step=5000),
-            checkboxInput("normalizeCheck", "Normalize Numerical Values", FALSE),
             checkboxInput("missingCheck", "Handle Missing, N/A, and Unknown Values (Imputation)", FALSE),
             checkboxInput("validationCheck", "Use Validation Set", FALSE),
-            selectInput("variableSelection", "Select Target Variable:", choices=c(
+            selectInput("variableSelection", "Select Target Variable (ACRS Report Type by default):", choices=c(
               "ACRS Report Type" = 'reportType',
               "Injury Severity" = 'injurySeverity',
               "Vehicle Damage Extent" = 'damageExtent'
@@ -207,6 +205,12 @@ server <- function(input, output) {
   output$groupedDistributionPlot <- renderPlotly({
     selected_column <- feature_column_map[[input$featureSelectInput]]
     create_distribution_plot(grouped_crash_df, selected_column)
+  })
+  observeEvent(input$resetDataButton, {
+    updateSliderInput(inputId="trainingInput", value=80)
+    updateCheckboxInput(inputId="missingCheck", value=FALSE)
+    updateCheckboxInput(inputId="validationCheck", value=FALSE)
+    updateSelectInput(inputId="variableSelection", selected='reportType')
   })
 }
 
