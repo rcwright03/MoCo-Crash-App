@@ -4,6 +4,8 @@ library(lubridate)
 library(tidyr)
 library(DescTools)
 library(reshape2)
+library(ggplot2)
+library(plotly)
 
 crash_df = read.csv("Data/crash_data_truncated.csv")
 
@@ -311,6 +313,55 @@ grouped_heatmap <- ggplot(corr_long, aes(Var1, Var2, fill = value)) +
   ) +
   labs(fill = "Cramér's V")
 
-create_distribution_plot(df, column) {
-  return(barplot(df$column, xlab="Values", ylab="Frequency", main="Frequency Distribution Graph"))
+create_distribution_plot <- function(df, column) {
+  plot_df <- as.data.frame(table(df[[column]]))
+  colnames(plot_df) <- c("category", "count")
+  
+  p <- ggplot(
+    plot_df,
+    aes(
+      x = category,
+      y = count,
+      fill = category,
+      text = paste(
+        "Category:", category,
+        "<br>Count:", count
+      )
+    )
+  ) +
+    geom_col() +
+    labs(
+      x = column,
+      y = "Frequency",
+      title = paste("Distribution of", column)
+    ) +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    )
+  
+  ggplotly(p, tooltip = "text")
 }
+
+feature_column_map <- c(
+  crashQuarter = "Crash_Quarter",
+  timeOfDay = "Time_of_day",
+  routeType = "Route_Type_Grouped",
+  weather = "Weather_Grouped",
+  surfaceCondition = "Surface_Condition_Grouped",
+  light = "Light_Grouped",
+  trafficControl = "Traffic_Control_Grouped",
+  driverSubstanceAbuse = "Driver_Substance_Grouped",
+  driverDistractedBy = "Driver_Distracted_Grouped",
+  vehicleFirstImpactLocation = "First_Impact_Grouped",
+  vehicleMovement = "Vehicle_Movement_Grouped",
+  vehicleBodyType = "Vehicle_Body_Type_Grouped",
+  collisionType = "Collision_Type_Grouped",
+  speedLimit = "Speed_Limit_Grouped",
+  acrsReportType = "ACRS_Report_Type",
+  injurySeverity = "Injury_Severity",
+  vehicleDamageExtent = "Vehicle_Damage_Extent",
+  parkedVehicle = "Parked_Vehicle"
+)
+

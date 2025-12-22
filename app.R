@@ -4,6 +4,7 @@ library(dplyr)
 library(ggplot2)
 library(corrplot)
 library(DT)
+library(plotly)
 source('helpers.R')
 
 ui <- dashboardPage(
@@ -96,14 +97,13 @@ ui <- dashboardPage(
               'Collision_Type_Grouped' = 'collisionType',
               'Speed_Limit_Grouped' = 'speedLimit',
               "ACRS_Report_Type" = 'acrsReportType',
-              'Injury Severity' = 'injurySeverity',
-              'Vehicle Damage Extent' = 'vehicleDamageExtent',
-              'Parked Vehicle' = 'parkedVehicle'
-            )),
+              'Injury_Severity' = 'injurySeverity',
+              'Vehicle_Damage_Extent' = 'vehicleDamageExtent',
+              'Parked_Vehicle' = 'parkedVehicle'
+            ),
+            selected='crashQuarter'),
             # distribution plot
-            plotOutput("normalDistributionPlot"),
-            br(), br(),
-            plotOutput("groupedDistributionPlot")
+            plotlyOutput("groupedDistributionPlot")
           )
         )
       ),
@@ -203,6 +203,10 @@ server <- function(input, output) {
   })
   output$correlationPlot <- renderPlot({
     grouped_heatmap
+  })
+  output$groupedDistributionPlot <- renderPlotly({
+    selected_column <- feature_column_map[[input$featureSelectInput]]
+    create_distribution_plot(grouped_crash_df, selected_column)
   })
 }
 
