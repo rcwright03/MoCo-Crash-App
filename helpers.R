@@ -6,6 +6,8 @@ library(DescTools)
 library(reshape2)
 library(ggplot2)
 library(plotly)
+library(mice)
+library(missForest)
 
 crash_df = read.csv("Data/crash_data_truncated.csv")
 
@@ -20,12 +22,11 @@ crash_df <- crash_df %>%
       where(is.character),
       ~ {
         x <- tolower(trimws(.x))
-        ifelse(x %in% missing_tokens, NA, x)
+        x[x %in% missing_tokens] <- NA
+        x
       }
     )
   )
-
-# function to get mode for imputation
 get_mode <- function(x) {
   x <- x[!is.na(x)]
   if (length(x) == 0) return(NA)
@@ -33,7 +34,7 @@ get_mode <- function(x) {
   uniq_vals <- unique(x)
   uniq_vals[which.max(tabulate(match(x, uniq_vals)))]
 }
-# mode imputation function
+# mode imputation (using mode for imputation b/c other methods take a very long time)
 mode_impute <- function(df) {
   df %>%
     mutate(
@@ -46,214 +47,221 @@ mode_impute <- function(df) {
       )
     )
 }
-
 # impute missing values or remove them (depending on user response)
 handle_missing_vals <- function(df, impute=FALSE) {
-  if (impute == TRUE) {
-    # perform imputation
-    df <- mode_impute()
+  if (impute) {
+    df <- mode_impute(df)
   } else {
     df <- na.omit(df)
   }
   return(df)
 }
 
-print(nrow(crash_df))
-handle_missing_vals(crash_df, FALSE)
-print(nrow(crash_df))
+#print(nrow(crash_df)) testing print statement
+imputed_crash_df <- handle_missing_vals(crash_df, TRUE)
+removed_crash_df <- handle_missing_vals(crash_df, FALSE)
+#print(nrow(imputed_crash_df)) testing print statement
+#print(nrow(removed_crash_df)) testing print statement
 
-# group columns
-grouped_crash_df <- crash_df %>%
-  mutate(
-    Crash_DateTime = as.POSIXct(
-      Crash.Date.Time,
-      format = "%m/%d/%Y %H:%M",
-      tz = "UTC"
-    ),
-    
-    Crash_Quarter = quarter(Crash_DateTime),
-    
-    Time_of_day = case_when(
-      hour(Crash_DateTime) >= 0  & hour(Crash_DateTime) < 6  ~ "12:00AM - 5:59AM",
-      hour(Crash_DateTime) >= 6  & hour(Crash_DateTime) < 12 ~ "6:00AM - 11:59AM",
-      hour(Crash_DateTime) >= 12 & hour(Crash_DateTime) < 18 ~ "12:00PM - 5:59PM",
-      hour(Crash_DateTime) >= 18 & hour(Crash_DateTime) < 24 ~ "6:00PM - 11:59PM",
-      TRUE ~ NA_character_
-    ),
-    
-    Route_Type_Grouped = case_when(
-      Route.Type %in% c("interstate (state)") ~ "Interstate",
-      Route.Type %in% c("maryland (state) route", "maryland (state)", "us (state)") ~ "US/State Route",
-      Route.Type %in% c("county route", "county", "local route") ~ "County/Local",
-      Route.Type %in% c("municipality route", "municipality", "government route", "government") ~ "Municipal/Gov",
-      Route.Type %in% c("ramp", "spur", "service road", "crossover") ~ "Ramp/Spur/Service",
-      Route.Type %in% c("other public roadway", "private route", "bicycle route") ~ "Other/Private",
-      Route.Type %in% c("unknown") ~ "Unknown",
-      TRUE ~ "Other"  # catch any unexpected values
-    ),
-    
-    Weather_Grouped = case_when(
-      Weather %in% c("rain", "raining", "freezing rain or freezing drizzle") ~ "Rain",
-      Weather %in% c("snow", "sleet or hail", "sleet", "wintry mix", "blowing snow") ~ "Snow/Sleet",
-      Weather %in% c("clear", "cloudy") ~ "Clear/Cloudy",
-      Weather %in% c("fog, smog, smoke", "foggy") ~ "Fog/Smoke",
-      Weather %in% c("severe crosswinds", "severe winds", "blowing sand, soil, dirt") ~ "Severe Winds",
-      Weather %in% c("unknown", "n/a", "other") ~ "Unknown/Other",
-      TRUE ~ "Other"
-    ),
-    
-    Surface_Condition_Grouped = case_when(
-      Surface.Condition %in% c("dry", "0") ~ "Dry",
-      Surface.Condition %in% c("wet", "water (standing, moving)", "water(standing/moving)") ~ "Wet",
-      Surface.Condition %in% c("snow", "ice/frost", "ice", "slush") ~ "Snow/Ice/Slush",
-      Surface.Condition %in% c("mud, dirt, gravel", "sand", "oil") ~ "Mud/Dirt/Gravel",
-      Surface.Condition %in% c("other", "n/a", "unknown") ~ "Unknown/Other",
-      TRUE ~ "Other"
-    ),
-    
-    Light_Grouped = case_when(
-      Light %in% c("daylight") ~ "Daylight",
-      Light %in% c("dark - lighted", "dark lights on", "dark no lights") ~ "Dark - Lighted",
-      Light %in% c("dark - not lighted") ~ "Dark - Not Lighted",
-      Light %in% c("dawn", "dusk") ~ "Dawn/Dusk",
-      Light %in% c("dark - unknown lighting", "dark -- unknown lighting", "other", "unknown", "n/a") ~ "Unknown/Other",
-      TRUE ~ "Other"
-    ),
-    
-    Traffic_Control_Grouped = case_when(
-      Traffic.Control %in% c("no controls", "0") ~ "No Control",
-      Traffic.Control %in% c("stop sign", "yield sign") ~ "Stop/Yield",
-      Traffic.Control %in% c("traffic control signal", "traffic signal", "flashing traffic control signal",
-                             "other signal", "lane use control signal", "flashing traffic signal", "ramp meter signal") ~ "Traffic Signal",
-      Traffic.Control %in% c("railroad crossing", "flashing railroad crossing signal (may include gates)",
-                             "railway crossing device") ~ "Railroad",
-      Traffic.Control %in% c("other pavement marking (excluding edgelines, centerlines, or lane lines)",
-                             "reduce speed ahead warning sign", "curve ahead warning sign", "other warning sign",
-                             "intersection ahead warning sign", "school zone", "school zone sign",
-                             "school zone sign device", "bicycle crossing sign", "pedestrian crossing sign",
-                             "pedestrian crossing") ~ "Warning/Pavement",
-      Traffic.Control %in% c("person (including flagger, law enforcement, crossing guard, etc.)", "person") ~ "Person/Flagger",
-      Traffic.Control %in% c("other", "n/a", "unknown", "warning sign") ~ "Unknown/Other",
-      TRUE ~ "Other"
-    ),
-    
-    Driver_Substance_Grouped = case_when(
-      Driver.Substance.Abuse %in% c("not suspect of alcohol use, not suspect of drug use", "none detected") ~ "No Substance Detected",
-      Driver.Substance.Abuse %in% c("suspect of alcohol use, not suspect of drug use", "suspect of alcohol use, unknown",
-                                    "alcohol present", "alcohol contributed") ~ "Suspected Alcohol",
-      Driver.Substance.Abuse %in% c("not suspect of alcohol use, suspect of drug use", "illegal drug present",
-                                    "illegal drug contributed") ~ "Suspected Drugs",
-      Driver.Substance.Abuse %in% c("medication contributed", "medication present", "combination contributed",
-                                    "combined substance present") ~ "Medication/Combination",
-      Driver.Substance.Abuse %in% c("unknown, unknown", "unknown, not suspect of drug use",
-                                    "unknown, suspect of drug use", "not suspect of alcohol use, unknown",
-                                    "other", "unknown", "n/a") ~ "Unknown/Other",
-      TRUE ~ "Other"
-    ),
-    
-    Driver_Distracted_Grouped = case_when(
-      Driver.Distracted.By %in% c("not distracted", "0", "no driver present") ~ "Not Distracted",
-      Driver.Distracted.By %in% c("talking/listening", "talking or listening to cellular phone",
-                                  "other cellular phone related", "dialing cellular phone",
-                                  "other electronic device (navigational palm pilot)",
-                                  "using other device controls integral to vehicle") ~ "Cellphone/Electronic",
-      Driver.Distracted.By %in% c("manually operating (dialing, playing game, etc.)",
-                                  "adjusting audio and or climate controls",
-                                  "using device object brought into vehicle",
-                                  "by moving object in vehicle", "eating or drinking", "smoking related") ~ "Manual/In-Vehicle Actions",
-      Driver.Distracted.By %in% c("looked but did not see", "inattentive or lost in thought",
-                                  "distracted by outside person object or event", "by other occupants") ~ "Looked/Inattentive/External",
-      Driver.Distracted.By %in% c("unknown", "other", "other action (looking away from task, etc.)") ~ "Unknown/Other",
-      TRUE ~ "Other"
-    ),
-    
-    First_Impact_Grouped = case_when(
-      Vehicle.First.Impact.Location %in% c("12 o clock", "12 oclock") ~ "Front",
-      Vehicle.First.Impact.Location %in% c("1 o clock", "2 o clock", "1 oclock", "2 oclock") ~ "Front-Right",
-      Vehicle.First.Impact.Location %in% c("3 o clock", "3 oclock") ~ "Right",
-      Vehicle.First.Impact.Location %in% c("4 o clock", "5 o clock", "4 oclock", "5 oclock") ~ "Back-Right",
-      Vehicle.First.Impact.Location %in% c("6 o clock", "6 oclock") ~ "Rear",
-      Vehicle.First.Impact.Location %in% c("7 o clock", "8 o clock", "7 oclock", "8 oclock") ~ "Back-Left",
-      Vehicle.First.Impact.Location %in% c("9 o clock", "9 oclock") ~ "Left",
-      Vehicle.First.Impact.Location %in% c("10 o clock", "11 o clock", "10 oclock", "11 oclock") ~ "Front-Left",
-      Vehicle.First.Impact.Location %in% c("top", "roof top") ~ "Top",
-      Vehicle.First.Impact.Location %in% c("underside") ~ "Underside",
-      Vehicle.First.Impact.Location %in% c("non-collision", "cargo loss") ~ "Non-Collision",
-      Vehicle.First.Impact.Location %in% c("vehicle not at scene") ~ "Vehicle Not at Scene",
-      Vehicle.First.Impact.Location %in% c("unknown", "0") ~ "Unknown/Other",
-      TRUE ~ "Other"
-    ),
-    
-    Vehicle_Movement_Grouped = case_when(
-      Vehicle.Movement %in% c("moving constant speed", "entering traffic lane", "accelerating",
-                              "starting from lane", "driverless moving veh.") ~ "Moving Straight/Constant",
-      Vehicle.Movement %in% c("turning left", "turning right", "making left turn", "making right turn",
-                              "making u-turn", "making u turn", "changing lanes", "leaving traffic lane",
-                              "right turn on red", "overtaking/passing", "passing") ~ "Turning/Lane Changes",
-      Vehicle.Movement %in% c("slowing or stopping", "stopped in traffic", "stopped in traffic lane",
-                              "parking", "parked", "starting from parked") ~ "Stopping/Slowing/Parked",
-      Vehicle.Movement %in% c("negotiating a curve", "skidding") ~ "Negotiating Curve/Skidding",
-      Vehicle.Movement %in% c("0", "unknown", "n/a", "other") ~ "Unknown/Other",
-      TRUE ~ "Other"
-    ),
-    
-    Vehicle_Body_Type_Grouped = case_when(
-      Vehicle.Body.Type %in% c("passenger car", "station wagon", "limousine") ~ "Passenger Car",
-      Vehicle.Body.Type %in% c("(sport) utility vehicle", "sport utility vehicle", "pickup", "pickup truck",
-                               "cargo van/light truck 2 axles (over 10,000lbs (4,536 kg))", "van",
-                               "van - cargo", "van - passenger (<9 seats)", "van - passenger (9 or 12 seats)",
-                               "other light trucks (10,000lbs (4,536 kg) or less)", "recreational off-highway vehicles (rov)"
-                               ) ~ "SUV/Van/Light Pickup",
-      Vehicle.Body.Type %in% c("medium/heavy trucks 3 axles (over 10,000lbs (4,536 kg))", "single-unit truck",
-                               "other trucks", "truck tractor") ~ "Heavy Truck",
-      Vehicle.Body.Type %in% c("motorcycle", "motorcycle - 2 wheeled", "motorcycle - 3 wheeled", "moped",
-                               "moped or motorized bicycle", "all terrain vehicle (atv)", "autocycle",
-                               "all-terrain vehicle/all-terrain cycle (atv/atc)") ~ "Motorcycle/ATV",
-      Vehicle.Body.Type %in% c("bus - mini", "bus - other type", "bus - school", "bus - transit",
-                               "cross country bus", "other bus", "school bus", "transit bus") ~ "Bus",
-      Vehicle.Body.Type %in% c("ambulance/emergency", "ambulance/non emergency", "fire vehicle/emergency",
-                               "fire vehicle/non emergency", "police vehicle/emergency", "police vehicle/non emergency") ~ "Emergency",
-      Vehicle.Body.Type %in% c("recreational vehicle", "farm vehicle", "low speed vehicle", "snowmobile"
-                               ) ~ "Other/Off-Road",
-      TRUE ~ "Other"
-    ),
-    
-    Collision_Type_Grouped = case_when(
-      Collision.Type %in% c("front to rear", "same dir rear end", "same dir rend left turn",
-                            "same dir rend right turn") ~ "Rear-End",
-      Collision.Type %in% c("head on", "front to front") ~ "Head-On",
-      Collision.Type %in% c("angle", "angle meets left head on", "angle meets left turn",
-                            "angle meets right turn", "straight movement angle") ~ "Angle",
-      Collision.Type %in% c("opposite direction sideswipe", "same direction sideswipe",
-                            "sideswipe, opposite direction", "sideswipe, same direction") ~ "Sideswipe",
-      Collision.Type %in% c("same dir both left turn", "same direction left turn", "same direction right turn",
-                            "head on left turn", "opposite dir both left turn") ~ "Turn Conflict",
-      Collision.Type %in% c("single vehicle") ~ "Single Vehicle",
-      TRUE ~ "Other"
-    ),
-    
-    Speed_Limit = case_when(
-      Speed.Limit < 15 & Speed.Limit >= 0 ~ '0-15',
-      Speed.Limit < 30 & Speed.Limit >= 15 ~ '15-30',
-      Speed.Limit < 45 & Speed.Limit >= 30 ~ '30-45',
-      Speed.Limit < 60 & Speed.Limit >= 45 ~ '45-60',
-      Speed.Limit >= 60 ~ '60+'
-    ),
-    
-    ACRS_Report_Type = ACRS.Report.Type,
-    Injury_Severity = Injury.Severity,
-    Vehicle_Damage_Extent = Vehicle.Damage.Extent,
-    Parked_Vehicle = Parked.Vehicle
-  ) %>%
-  select(Crash_Quarter, Time_of_day, Route_Type_Grouped, Weather_Grouped, Surface_Condition_Grouped,
-         Light_Grouped, Traffic_Control_Grouped, Driver_Substance_Grouped, Driver_Distracted_Grouped,
-         First_Impact_Grouped, Vehicle_Movement_Grouped, Vehicle_Body_Type_Grouped, Collision_Type_Grouped,
-         Speed_Limit, ACRS_Report_Type, Injury_Severity, Vehicle_Damage_Extent, Parked_Vehicle)
+group_cols <- function(grouped_df, df){
+  grouped_df <- df %>%
+    mutate(
+      Crash_DateTime = as.POSIXct(
+        Crash.Date.Time,
+        format = "%m/%d/%Y %H:%M",
+        tz = "UTC"
+      ),
+      
+      Crash_Quarter = quarter(Crash_DateTime),
+      
+      Time_of_day = case_when(
+        hour(Crash_DateTime) >= 0  & hour(Crash_DateTime) < 6  ~ "12:00AM - 5:59AM",
+        hour(Crash_DateTime) >= 6  & hour(Crash_DateTime) < 12 ~ "6:00AM - 11:59AM",
+        hour(Crash_DateTime) >= 12 & hour(Crash_DateTime) < 18 ~ "12:00PM - 5:59PM",
+        hour(Crash_DateTime) >= 18 & hour(Crash_DateTime) < 24 ~ "6:00PM - 11:59PM",
+        TRUE ~ NA_character_
+      ),
+      
+      Route_Type_Grouped = case_when(
+        Route.Type %in% c("interstate (state)") ~ "Interstate",
+        Route.Type %in% c("maryland (state) route", "maryland (state)", "us (state)") ~ "US/State Route",
+        Route.Type %in% c("county route", "county", "local route") ~ "County/Local",
+        Route.Type %in% c("municipality route", "municipality", "government route", "government") ~ "Municipal/Gov",
+        Route.Type %in% c("ramp", "spur", "service road", "crossover") ~ "Ramp/Spur/Service",
+        Route.Type %in% c("other public roadway", "private route", "bicycle route") ~ "Other/Private",
+        Route.Type %in% c("unknown") ~ "Unknown",
+        TRUE ~ "Other"  # catch any unexpected values
+      ),
+      
+      Weather_Grouped = case_when(
+        Weather %in% c("rain", "raining", "freezing rain or freezing drizzle") ~ "Rain",
+        Weather %in% c("snow", "sleet or hail", "sleet", "wintry mix", "blowing snow") ~ "Snow/Sleet",
+        Weather %in% c("clear", "cloudy") ~ "Clear/Cloudy",
+        Weather %in% c("fog, smog, smoke", "foggy") ~ "Fog/Smoke",
+        Weather %in% c("severe crosswinds", "severe winds", "blowing sand, soil, dirt") ~ "Severe Winds",
+        Weather %in% c("unknown", "n/a", "other") ~ "Unknown/Other",
+        TRUE ~ "Other"
+      ),
+      
+      Surface_Condition_Grouped = case_when(
+        Surface.Condition %in% c("dry", "0") ~ "Dry",
+        Surface.Condition %in% c("wet", "water (standing, moving)", "water(standing/moving)") ~ "Wet",
+        Surface.Condition %in% c("snow", "ice/frost", "ice", "slush") ~ "Snow/Ice/Slush",
+        Surface.Condition %in% c("mud, dirt, gravel", "sand", "oil") ~ "Mud/Dirt/Gravel",
+        Surface.Condition %in% c("other", "n/a", "unknown") ~ "Unknown/Other",
+        TRUE ~ "Other"
+      ),
+      
+      Light_Grouped = case_when(
+        Light %in% c("daylight") ~ "Daylight",
+        Light %in% c("dark - lighted", "dark lights on", "dark no lights") ~ "Dark - Lighted",
+        Light %in% c("dark - not lighted") ~ "Dark - Not Lighted",
+        Light %in% c("dawn", "dusk") ~ "Dawn/Dusk",
+        Light %in% c("dark - unknown lighting", "dark -- unknown lighting", "other", "unknown", "n/a") ~ "Unknown/Other",
+        TRUE ~ "Other"
+      ),
+      
+      Traffic_Control_Grouped = case_when(
+        Traffic.Control %in% c("no controls", "0") ~ "No Control",
+        Traffic.Control %in% c("stop sign", "yield sign") ~ "Stop/Yield",
+        Traffic.Control %in% c("traffic control signal", "traffic signal", "flashing traffic control signal",
+                               "other signal", "lane use control signal", "flashing traffic signal", "ramp meter signal") ~ "Traffic Signal",
+        Traffic.Control %in% c("railroad crossing", "flashing railroad crossing signal (may include gates)",
+                               "railway crossing device") ~ "Railroad",
+        Traffic.Control %in% c("other pavement marking (excluding edgelines, centerlines, or lane lines)",
+                               "reduce speed ahead warning sign", "curve ahead warning sign", "other warning sign",
+                               "intersection ahead warning sign", "school zone", "school zone sign",
+                               "school zone sign device", "bicycle crossing sign", "pedestrian crossing sign",
+                               "pedestrian crossing") ~ "Warning/Pavement",
+        Traffic.Control %in% c("person (including flagger, law enforcement, crossing guard, etc.)", "person") ~ "Person/Flagger",
+        Traffic.Control %in% c("other", "n/a", "unknown", "warning sign") ~ "Unknown/Other",
+        TRUE ~ "Other"
+      ),
+      
+      Driver_Substance_Grouped = case_when(
+        Driver.Substance.Abuse %in% c("not suspect of alcohol use, not suspect of drug use", "none detected") ~ "No Substance Detected",
+        Driver.Substance.Abuse %in% c("suspect of alcohol use, not suspect of drug use", "suspect of alcohol use, unknown",
+                                      "alcohol present", "alcohol contributed") ~ "Suspected Alcohol",
+        Driver.Substance.Abuse %in% c("not suspect of alcohol use, suspect of drug use", "illegal drug present",
+                                      "illegal drug contributed", "unknown, suspect of drug use") ~ "Suspected Drugs",
+        Driver.Substance.Abuse %in% c("medication contributed", "medication present", "combination contributed",
+                                      "combined substance present", "suspect of alcohol use, suspect of drug use") ~ "Medication/Combination",
+        Driver.Substance.Abuse %in% c("unknown, unknown", "unknown, not suspect of drug use", "not suspect of alcohol use, unknown",
+                                      "other", "unknown", "n/a", "") ~ "Unknown/Other",
+        TRUE ~ "Other"
+      ),
+      
+      Driver_Distracted_Grouped = case_when(
+        Driver.Distracted.By %in% c("not distracted", "0", "no driver present") ~ "Not Distracted",
+        Driver.Distracted.By %in% c("talking/listening", "talking or listening to cellular phone",
+                                    "other cellular phone related", "dialing cellular phone",
+                                    "other electronic device (navigational palm pilot)",
+                                    "using other device controls integral to vehicle") ~ "Cellphone/Electronic",
+        Driver.Distracted.By %in% c("manually operating (dialing, playing game, etc.)",
+                                    "adjusting audio and or climate controls",
+                                    "using device object brought into vehicle",
+                                    "by moving object in vehicle", "eating or drinking", "smoking related") ~ "Manual/In-Vehicle Actions",
+        Driver.Distracted.By %in% c("looked but did not see", "inattentive or lost in thought",
+                                    "distracted by outside person object or event", "by other occupants") ~ "Looked/Inattentive/External",
+        Driver.Distracted.By %in% c("unknown", "other", "other action (looking away from task, etc.)") ~ "Unknown/Other",
+        TRUE ~ "Other"
+      ),
+      
+      First_Impact_Grouped = case_when(
+        Vehicle.First.Impact.Location %in% c("twelve o clock", "twelve oclock") ~ "Front",
+        Vehicle.First.Impact.Location %in% c("one o clock", "two o clock", "one oclock", "two oclock") ~ "Front-Right",
+        Vehicle.First.Impact.Location %in% c("three o clock", "three oclock") ~ "Right",
+        Vehicle.First.Impact.Location %in% c("four o clock", "five o clock", "four oclock", "five oclock") ~ "Back-Right",
+        Vehicle.First.Impact.Location %in% c("six o clock", "six oclock") ~ "Rear",
+        Vehicle.First.Impact.Location %in% c("seven o clock", "eight o clock", "seven oclock", "eight oclock") ~ "Back-Left",
+        Vehicle.First.Impact.Location %in% c("nine o clock", "nine oclock") ~ "Left",
+        Vehicle.First.Impact.Location %in% c("ten o clock", "eleven o clock", "ten oclock", "eleven oclock") ~ "Front-Left",
+        Vehicle.First.Impact.Location %in% c("top", "roof top") ~ "Top",
+        Vehicle.First.Impact.Location %in% c("underside") ~ "Underside",
+        Vehicle.First.Impact.Location %in% c("non-collision", "cargo loss") ~ "Non-Collision",
+        Vehicle.First.Impact.Location %in% c("vehicle not at scene") ~ "Vehicle Not at Scene",
+        Vehicle.First.Impact.Location %in% c("unknown", "0") ~ "Unknown/Other",
+        TRUE ~ "Other"
+      ),
+      
+      Vehicle_Movement_Grouped = case_when(
+        Vehicle.Movement %in% c("moving constant speed", "entering traffic lane", "accelerating",
+                                "starting from lane", "driverless moving veh.") ~ "Moving Straight/Constant",
+        Vehicle.Movement %in% c("turning left", "turning right", "making left turn", "making right turn",
+                                "making u-turn", "making u turn", "changing lanes", "leaving traffic lane",
+                                "right turn on red", "overtaking/passing", "passing") ~ "Turning/Lane Changes",
+        Vehicle.Movement %in% c("slowing or stopping", "stopped in traffic", "stopped in traffic lane",
+                                "parking", "parked", "starting from parked") ~ "Stopping/Slowing/Parked",
+        Vehicle.Movement %in% c("negotiating a curve", "skidding") ~ "Negotiating Curve/Skidding",
+        Vehicle.Movement %in% c("0", "unknown", "n/a", "other") ~ "Unknown/Other",
+        TRUE ~ "Other"
+      ),
+      
+      Vehicle_Body_Type_Grouped = case_when(
+        Vehicle.Body.Type %in% c("passenger car", "station wagon", "limousine") ~ "Passenger Car",
+        Vehicle.Body.Type %in% c("(sport) utility vehicle", "sport utility vehicle", "pickup", "pickup truck",
+                                 "cargo van/light truck 2 axles (over 10,000lbs (4,536 kg))", "van",
+                                 "van - cargo", "van - passenger (<9 seats)", "van - passenger (9 or 12 seats)",
+                                 "other light trucks (10,000lbs (4,536 kg) or less)", "recreational off-highway vehicles (rov)"
+        ) ~ "SUV/Van/Light Pickup",
+        Vehicle.Body.Type %in% c("medium/heavy trucks 3 axles (over 10,000lbs (4,536 kg))", "single-unit truck",
+                                 "other trucks", "truck tractor") ~ "Heavy Truck",
+        Vehicle.Body.Type %in% c("motorcycle", "motorcycle - 2 wheeled", "motorcycle - 3 wheeled", "moped",
+                                 "moped or motorized bicycle", "all terrain vehicle (atv)", "autocycle",
+                                 "all-terrain vehicle/all-terrain cycle (atv/atc)") ~ "Motorcycle/ATV",
+        Vehicle.Body.Type %in% c("bus - mini", "bus - other type", "bus - school", "bus - transit",
+                                 "cross country bus", "other bus", "school bus", "transit bus") ~ "Bus",
+        Vehicle.Body.Type %in% c("ambulance/emergency", "ambulance/non emergency", "fire vehicle/emergency",
+                                 "fire vehicle/non emergency", "police vehicle/emergency", "police vehicle/non emergency") ~ "Emergency",
+        Vehicle.Body.Type %in% c("recreational vehicle", "farm vehicle", "low speed vehicle", "snowmobile"
+        ) ~ "Other/Off-Road",
+        TRUE ~ "Other"
+      ),
+      
+      Collision_Type_Grouped = case_when(
+        Collision.Type %in% c("front to rear", "same dir rear end", "same dir rend left turn",
+                              "same dir rend right turn") ~ "Rear-End",
+        Collision.Type %in% c("head on", "front to front") ~ "Head-On",
+        Collision.Type %in% c("angle", "angle meets left head on", "angle meets left turn",
+                              "angle meets right turn", "straight movement angle") ~ "Angle",
+        Collision.Type %in% c("opposite direction sideswipe", "same direction sideswipe",
+                              "sideswipe, opposite direction", "sideswipe, same direction") ~ "Sideswipe",
+        Collision.Type %in% c("same dir both left turn", "same direction left turn", "same direction right turn",
+                              "head on left turn", "opposite dir both left turn") ~ "Turn Conflict",
+        Collision.Type %in% c("single vehicle") ~ "Single Vehicle",
+        TRUE ~ "Other"
+      ),
+      
+      Speed_Limit_Grouped = case_when(
+        Speed.Limit < 15 & Speed.Limit >= 0 ~ '0-15',
+        Speed.Limit < 30 & Speed.Limit >= 15 ~ '15-30',
+        Speed.Limit < 45 & Speed.Limit >= 30 ~ '30-45',
+        Speed.Limit < 60 & Speed.Limit >= 45 ~ '45-60',
+        Speed.Limit >= 60 ~ '60+'
+      ),
+      
+      ACRS_Report_Type = ACRS.Report.Type,
+      Injury_Severity = Injury.Severity,
+      Vehicle_Damage_Extent = Vehicle.Damage.Extent,
+      Parked_Vehicle = Parked.Vehicle
+    ) %>%
+    select(Crash_Quarter, Time_of_day, Route_Type_Grouped, Weather_Grouped, Surface_Condition_Grouped,
+           Light_Grouped, Traffic_Control_Grouped, Driver_Substance_Grouped, Driver_Distracted_Grouped,
+           First_Impact_Grouped, Vehicle_Movement_Grouped, Vehicle_Body_Type_Grouped, Collision_Type_Grouped,
+           Speed_Limit_Grouped, ACRS_Report_Type, Injury_Severity, Vehicle_Damage_Extent, Parked_Vehicle)
+  grouped_df <- grouped_df %>%
+    mutate(across(everything(), as.factor))
+  return(grouped_df)
+}
 
-grouped_crash_df <- grouped_crash_df %>%
-  mutate(across(everything(), as.factor))
+grouped_crash_df_imp <- group_cols(grouped_crash_df_imp, imputed_crash_df)
+grouped_crash_df_rem <- group_cols(grouped_crash_df_rem, removed_crash_df)
 
-head(grouped_crash_df)
+# tables for santiy checks
+# imptable <- table(grouped_crash_df_imp$Driver_Substance_Grouped)
+# print(imptable)
+# remtable <- table(grouped_crash_df_rem$Driver_Substance_Grouped)
+# print(remtable)
 
 # sanity checks
 # crashQuarterTable <- table(grouped_crash_df$Crash_Quarter)
@@ -296,7 +304,7 @@ cramers_v_matrix <- function(df) {
   mat
 }
 
-corr_mat <- cramers_v_matrix(grouped_crash_df)
+corr_mat <- cramers_v_matrix(grouped_crash_df_rem)
 corr_long <- melt(corr_mat)
 grouped_heatmap <- ggplot(corr_long, aes(Var1, Var2, fill = value)) +
   geom_tile() +
@@ -365,3 +373,116 @@ feature_column_map <- c(
   parkedVehicle = "Parked_Vehicle"
 )
 
+processData <- function(trainingSize, impute=FALSE) {
+  if(impute){
+    df <- grouped_crash_df_imp
+  } else {
+    df <- grouped_crash_df_rem
+  }
+  set.seed(42)
+  # print("start") testing print statement
+  split_idx <- sample(nrow(df), (trainingSize/100)*nrow(df))
+  
+  training_data <- df[split_idx, ]
+  testing_data  <- df[-split_idx, ]
+  
+  # print("success") testing print statement
+  return(list(training=training_data, testing=testing_data))
+}
+
+# valCheck
+# what to do with validation check? idk
+
+# target variable
+# how to handle training based on target variable?
+# use if statement (if targetvar = injury severity --> train model on everything but acrs report type and vehicle damage extent)
+    # lengthy but could work
+# have separate dfs for each target variable
+    # memory heavy
+# 
+
+# choose which model to use
+chooseModel <- function(targetVar, modelInput, dataList){
+  if (modelInput == "randomForest") {
+    # how to get ntrees and varpersplit
+    #createRF(targetVar, )
+  } else if (modelInput == "logisticRegression") {
+    
+  } else if (modelInput == "naiveBayes") {
+    
+  } else if (modelInput == "knn") {
+    
+  } else if (modelInput == "svm") {
+    
+  }
+}
+# create random forest model
+createRF <- function(targetVar, numTrees, varPerSplit, dataList){
+  library(randomForest)
+  if (targetVar == "Injury_Severity"){
+    # create model to classify injury severity
+    rfModel <- randomForest(Injury_Severity ~ . - ACRS_Report_Type - Vehicle_Damage_Extent,
+                            data=dataList[1], ntree=numTrees, mtry=sqrt(varPerSplit))
+    # do something with test data
+  } else if (targetVar == "ACRS_Report_Type") {
+    # create model to classify ACRS report type
+    rfModel <- randomForest(ACRS_Report_Type ~ . - Injury_Severity - Vehicle_Damage_Extent,
+                            data=dataList[1], ntree=numTrees, mtry=sqrt(varPerSplit))
+  } else if (targetVar == "Vehicle_Damage_Extent") {
+    # create model to classify vehicle damage extent
+    rfModel <- randomForest(Vehicle_Damage_Extent ~ . - ACRS_Report_Type - Injury_Severity,
+                            data=dataList[1], ntree=numTrees, mtry=sqrt(varPerSplit))
+  }
+}
+# create logistic regression model
+createLogReg <- function(targetVar, dataList) {
+  if (targetVar == "Injury_Severity"){
+    # create model to classify injury severity
+    
+  } else if (targetVar == "ACRS_Report_Type") {
+    # create model to classify ACRS report type
+    
+  } else if (targetVar == "Vehicle_Damage_Extent") {
+    # create model to classify vehicle damage extent
+    
+  }
+}
+# naive bayes model
+createNaiveBayes <- function(targetVar, useKFold, dataList) {
+  if (targetVar == "Injury_Severity"){
+    # create model to classify injury severity
+    
+  } else if (targetVar == "ACRS_Report_Type") {
+    # create model to classify ACRS report type
+    
+  } else if (targetVar == "Vehicle_Damage_Extent") {
+    # create model to classify vehicle damage extent
+    
+  }
+}
+# knn model
+createKNN <- function(targetVar, kVal, dataList) {
+  if (targetVar == "Injury_Severity"){
+    # create model to classify injury severity
+    
+  } else if (targetVar == "ACRS_Report_Type") {
+    # create model to classify ACRS report type
+    
+  } else if (targetVar == "Vehicle_Damage_Extent") {
+    # create model to classify vehicle damage extent
+    
+  }
+}
+# svm model
+createSVM <- function(targetVar, kernelType, costParam, dataList) {
+  if (targetVar == "Injury_Severity"){
+    # create model to classify injury severity
+    
+  } else if (targetVar == "ACRS_Report_Type") {
+    # create model to classify ACRS report type
+    
+  } else if (targetVar == "Vehicle_Damage_Extent") {
+    # create model to classify vehicle damage extent
+    
+  }
+}

@@ -5,6 +5,7 @@ library(ggplot2)
 library(corrplot)
 library(DT)
 library(plotly)
+library(shinycssloaders)
 source('helpers.R')
 
 ui <- dashboardPage(
@@ -113,7 +114,7 @@ ui <- dashboardPage(
           box(
             title='Data Preprocessing Options', solidHeader=TRUE, width=12, status='info',
             sliderInput("trainingInput", "Select Training Set Size (%):", min=50, max=90, value=80, step=5),
-            checkboxInput("missingCheck", "Handle Missing, N/A, and Unknown Values (Imputation)", FALSE),
+            checkboxInput("missingCheck", "Handle Missing, N/A, and Unknown Values (mode imputation)", FALSE),
             checkboxInput("validationCheck", "Use Validation Set", FALSE),
             selectInput("variableSelection", "Select Target Variable (ACRS Report Type by default):", choices=c(
               "ACRS Report Type" = 'reportType',
@@ -122,7 +123,11 @@ ui <- dashboardPage(
             )),
             actionButton("resetDataButton", "Reset Options", icon=icon('arrow-rotate-right'), class='btn-warning'),
             br(), br(),
-            actionButton("preprocessDataButton", "Preprocess Data", icon=icon("save"), class='btn-success')
+            actionButton("preprocessDataButton", "Preprocess Data", icon=icon("save"), class='btn-success'),
+            span(
+              style="margin-left: 15px;",
+              htmlOutput("preprocess_status")
+            )
           )
         ),
         fluidRow(
@@ -131,7 +136,46 @@ ui <- dashboardPage(
             # paste output of results
             # number of rows kept and number of rows removed
             # graph of data that can be altered and features can be selected and modified
-            
+            verbatimTextOutput("preprocess_summary")
+        )),
+        fluidRow(
+          box(
+            title="Training Data View", solidHeader=TRUE, width=12, status='warning',
+            DTOutput('training_data_table'),
+          )
+        ),
+        fluidRow(
+          box(
+            title="Testing Data View", solidHeader=TRUE, width=12, status='info',
+            DTOutput('testing_data_table'),
+          )
+        ),
+        fluidRow(
+          box(
+            title="Training/Testing Data Comparison", solidHeader=TRUE, width=12, status='success',
+            selectInput('comparisonFeatureSelectInput', 'Select Feature to See Distribution: ', choices=c(
+              'Crash_Quarter' = 'crashQuarter',
+              'Time_of_day' = 'timeOfDay',
+              'Route_Type_Grouped' = 'routeType',
+              'Weather_Grouped' = 'weather',
+              'Surface_Condition_Grouped' = 'surfaceCondition',
+              'Light_Grouped' = 'light',
+              'Traffic_Control_Grouped' = 'trafficControl',
+              'Driver_Substance_Grouped' = 'driverSubstanceAbuse',
+              'Driver_Distracted_Grouped' = 'driverDistractedBy',
+              'First_Impact_Grouped' = 'vehicleFirstImpactLocation',
+              'Vehicle_Movement_Grouped' = 'vehicleMovement',
+              'Vehicle_Body_Type_Grouped' = 'vehicleBodyType',
+              'Collision_Type_Grouped' = 'collisionType',
+              'Speed_Limit_Grouped' = 'speedLimit',
+              "ACRS_Report_Type" = 'acrsReportType',
+              'Injury_Severity' = 'injurySeverity',
+              'Vehicle_Damage_Extent' = 'vehicleDamageExtent',
+              'Parked_Vehicle' = 'parkedVehicle'
+            ),
+            selected='crashQuarter'),
+            plotlyOutput('training_data_histogram'),
+            plotlyOutput('testing_data_histogram')
           )
         )
       ),
@@ -185,8 +229,13 @@ ui <- dashboardPage(
 )
 
 server <- function(input, output) {
+  rv <- reactiveValues(
+    train_data = NULL,
+    test_data = NULL
+  )
+  
   output$grouped_crash_table <- renderDT({
-    datatable(grouped_crash_df,
+    datatable(grouped_crash_df_rem,
               options=list(pagelength=10,
                            scrollX=TRUE,
                            autowidth=TRUE,
@@ -204,13 +253,77 @@ server <- function(input, output) {
   })
   output$groupedDistributionPlot <- renderPlotly({
     selected_column <- feature_column_map[[input$featureSelectInput]]
-    create_distribution_plot(grouped_crash_df, selected_column)
+    create_distribution_plot(grouped_crash_df_rem, selected_column)
   })
   observeEvent(input$resetDataButton, {
     updateSliderInput(inputId="trainingInput", value=80)
     updateCheckboxInput(inputId="missingCheck", value=FALSE)
     updateCheckboxInput(inputId="validationCheck", value=FALSE)
     updateSelectInput(inputId="variableSelection", selected='reportType')
+    # clear preprocess summary and update preprocess status
+    output$preprocess_summary <- renderPrint({
+      cat("")
+      })
+    output$preprocess_status <- renderUI({
+      tags$span(
+        style = "color: orange; font-weight: bold;",
+        "Options resetted"
+      )
+    })
+  })
+  observeEvent(input$preprocessDataButton, {
+    impute <- input$missingCheck
+    trainingSize <- input$trainingInput
+    splits <- processData(trainingSize, impute)
+    
+    rv$train_data <- splits$training
+    rv$test_data <- splits$testing
+    
+    # preprocess status text
+    output$preprocess_status <- renderUI({
+      tags$span(
+        style = "color: green; font-weight: bold;",
+        "✓ Data successfully preprocessed"
+      )
+    })
+    output$preprocess_summary <- renderPrint({
+      # display preprocess stats
+      # (nrows in training set, nrows in test set, etc.)
+      req(rv$train_data, rv$test_data)
+      cat("Data Summary: \n")
+      cat("Imputation used: ", impute, "\n")
+      cat("Train/Test split: ", trainingSize, "/", 100-trainingSize, "\n")
+      cat("Total dataset size: ", nrow(rv$train_data)+nrow(rv$test_data), " entries\n")
+      cat("Training set size: ", nrow(rv$train_data), " entries\n")
+      cat("Testing set size: ", nrow(rv$test_data), " entries\n")
+      cat("")
+    })
+    output$training_data_table <- renderDT({
+      datatable(rv$train_data,
+                options=list(pagelength=10,
+                             scrollX=TRUE,
+                             autowidth=TRUE,
+                             search=list(regex=FALSE, caseInsensitive=TRUE),
+                             searchCols=NULL),
+                filter='top')
+    })
+    output$training_data_histogram <- renderPlotly({
+      selected_column <- feature_column_map[[input$comparisonFeatureSelectInput]]
+      create_distribution_plot(rv$train_data, selected_column)
+    })
+    output$testing_data_table <- renderDT({
+      datatable(rv$test_data,
+                options=list(pagelength=10,
+                             scrollX=TRUE,
+                             autowidth=TRUE,
+                             search=list(regex=FALSE, caseInsensitive=TRUE),
+                             searchCols=NULL),
+                filter='top')
+    })
+    output$testing_data_histogram <- renderPlotly({
+      selected_column <- feature_column_map[[input$comparisonFeatureSelectInput]]
+      create_distribution_plot(rv$test_data, selected_column)
+    })
   })
 }
 
