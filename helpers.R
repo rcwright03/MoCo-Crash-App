@@ -8,6 +8,7 @@ library(ggplot2)
 library(plotly)
 library(mice)
 library(missForest)
+library(caret)
 
 crash_df = read.csv("Data/crash_data_truncated.csv")
 
@@ -401,38 +402,33 @@ processData <- function(trainingSize, impute=FALSE) {
     # memory heavy
 # 
 
-# choose which model to use
-chooseModel <- function(targetVar, modelInput, dataList){
-  if (modelInput == "randomForest") {
-    # how to get ntrees and varpersplit
-    #createRF(targetVar, )
-  } else if (modelInput == "logisticRegression") {
-    
-  } else if (modelInput == "naiveBayes") {
-    
-  } else if (modelInput == "knn") {
-    
-  } else if (modelInput == "svm") {
-    
-  }
-}
 # create random forest model
-createRF <- function(targetVar, numTrees, varPerSplit, dataList){
+createRF <- function(targetVar, numTrees, varPerSplit, train_data, test_data){
   library(randomForest)
   if (targetVar == "Injury_Severity"){
     # create model to classify injury severity
     rfModel <- randomForest(Injury_Severity ~ . - ACRS_Report_Type - Vehicle_Damage_Extent,
-                            data=dataList[1], ntree=numTrees, mtry=sqrt(varPerSplit))
-    # do something with test data
+                            data=train_data, ntree=numTrees, mtry=sqrt(varPerSplit), importance=TRUE)
+    # make prediction with test data
+    # produce confusion matrix and graph
   } else if (targetVar == "ACRS_Report_Type") {
     # create model to classify ACRS report type
     rfModel <- randomForest(ACRS_Report_Type ~ . - Injury_Severity - Vehicle_Damage_Extent,
-                            data=dataList[1], ntree=numTrees, mtry=sqrt(varPerSplit))
+                            data=train_data, ntree=numTrees, mtry=sqrt(varPerSplit), importance=TRUE)
   } else if (targetVar == "Vehicle_Damage_Extent") {
     # create model to classify vehicle damage extent
     rfModel <- randomForest(Vehicle_Damage_Extent ~ . - ACRS_Report_Type - Injury_Severity,
-                            data=dataList[1], ntree=numTrees, mtry=sqrt(varPerSplit))
+                            data=train_data, ntree=numTrees, mtry=sqrt(varPerSplit), importance=TRUE)
   }
+  # make predictions, display confusion matrix
+  predictions <- predict(rfModel, newdata = test_data, type="class")
+  
+  cm <- confusionMatrix(
+    data = predictions,
+    reference=test_data[[targetVar]]
+  )
+  print(cm)
+  as.data.frame(cm$table)
 }
 # create logistic regression model
 createLogReg <- function(targetVar, dataList) {

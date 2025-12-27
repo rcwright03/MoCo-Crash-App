@@ -6,6 +6,7 @@ library(corrplot)
 library(DT)
 library(plotly)
 library(shinycssloaders)
+library(reshape2)
 source('helpers.R')
 
 ui <- dashboardPage(
@@ -117,9 +118,9 @@ ui <- dashboardPage(
             checkboxInput("missingCheck", "Handle Missing, N/A, and Unknown Values (mode imputation)", FALSE),
             checkboxInput("validationCheck", "Use Validation Set", FALSE),
             selectInput("variableSelection", "Select Target Variable (ACRS Report Type by default):", choices=c(
-              "ACRS Report Type" = 'reportType',
-              "Injury Severity" = 'injurySeverity',
-              "Vehicle Damage Extent" = 'damageExtent'
+              "ACRS_Report_Type" = 'ACRS_Report_Type',
+              "Injury_Severity" = 'Injury_Severity',
+              "Vehicle_Damage_Extent" = 'Vehicle_Damage_Extent'
             )),
             actionButton("resetDataButton", "Reset Options", icon=icon('arrow-rotate-right'), class='btn-warning'),
             br(), br(),
@@ -195,7 +196,7 @@ ui <- dashboardPage(
             conditionalPanel(
               condition = "input.modelInput == 'randomForest'",
               sliderInput('numTrees', 'Number of Trees:', min=100, max=500, value=300, step=50),
-              sliderInput('varPerSplit', 'Number of Variables per Split:', min=1, max=8, value=4, step=1)
+              sliderInput('varPerSplit', 'Mtry (square root of number of variables at each split):', min=1, max=18, value=4, step=1)
             ),
             conditionalPanel(
               condition = "input.modelInput == 'logisticRegression'"
@@ -219,6 +220,12 @@ ui <- dashboardPage(
             ),
             actionButton('trainButton', 'Train Model', icon=icon('gear'), class='btn-success')
           )
+        ),
+        fluidRow(
+          box(
+            title='Model Training Results', solidHeader=TRUE, width=12, status='success',
+            plotOutput('cmPlot')
+          )
         )
       ),
       tabItem(
@@ -231,7 +238,9 @@ ui <- dashboardPage(
 server <- function(input, output) {
   rv <- reactiveValues(
     train_data = NULL,
-    test_data = NULL
+    test_data = NULL,
+    model = NULL,
+    target_var = NULL
   )
   
   output$grouped_crash_table <- renderDT({
@@ -324,6 +333,34 @@ server <- function(input, output) {
       selected_column <- feature_column_map[[input$comparisonFeatureSelectInput]]
       create_distribution_plot(rv$test_data, selected_column)
     })
+  })
+  observeEvent(input$trainButton, {
+    rv$model <- input$modelInput
+    rv$target_var <- input$variableSelection
+    # train model fcn
+    if(rv$model == 'randomForest'){
+      # create random forest model
+      cm_df <- createRF(rv$target_var, input$numTrees, input$varPerSplit, rv$train_data, rv$test_data)
+      
+      # print confusion matrix from model, other stats (num trees, etc.)
+      output$cmPlot <- renderPlot({
+        ggplot(cm_df, aes(x=Reference, y=Prediction, fill=Freq)) +
+          geom_tile(color = 'white') +
+          geom_text(aes(label=Freq), vjust=1) +
+          scale_fill_gradient(low='white', high='#006D2C') +
+          theme_bw() +
+          labs(title="Confusion Matrix Heatmap")
+      })
+      
+    } else if (rv$model == 'logisticRegression') {
+      
+    } else if (rv$model == 'naiveBayes') {
+      
+    } else if (rv$model == 'knn') {
+      
+    } else if (rv$model == 'svm') {
+      
+    }
   })
 }
 
