@@ -224,6 +224,7 @@ ui <- dashboardPage(
         fluidRow(
           box(
             title='Model Training Results', solidHeader=TRUE, width=12, status='success',
+            verbatimTextOutput('modelTextSummary'),
             plotOutput('cmPlot')
           )
         )
@@ -240,7 +241,8 @@ server <- function(input, output) {
     train_data = NULL,
     test_data = NULL,
     model = NULL,
-    target_var = NULL
+    target_var = NULL,
+    model_results = NULL
   )
   
   output$grouped_crash_table <- renderDT({
@@ -340,20 +342,30 @@ server <- function(input, output) {
     # train model fcn
     if(rv$model == 'randomForest'){
       # create random forest model
-      cm_df <- createRF(rv$target_var, input$numTrees, input$varPerSplit, rv$train_data, rv$test_data)
+      rv$model_results <- createRF(rv$target_var, input$numTrees, input$varPerSplit, rv$train_data, rv$test_data)
+      res <- rv$model_results
       
       # print confusion matrix from model, other stats (num trees, etc.)
-      output$cmPlot <- renderPlot({
-        ggplot(cm_df, aes(x=Reference, y=Prediction, fill=Freq)) +
-          geom_tile(color = 'white') +
-          geom_text(aes(label=Freq), vjust=1) +
-          scale_fill_gradient(low='white', high='#006D2C') +
-          theme_bw() +
-          labs(title="Confusion Matrix Heatmap")
+      output$modelTextSummary <- renderPrint({
+        cat("Accuracy:", round(as.numeric(res$accuracy, 3)), "\n")
+        cat("Kappa:", round(as.numeric(res$kappa, 3)), "\n")
+        cat("Macro Precision:", round(res$macro_metrics["precision"], 3), "\n")
+        cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
+        cat("Macro F1:", round(res$macro_metrics["f1"], 3))
       })
       
-    } else if (rv$model == 'logisticRegression') {
       
+    } else if (rv$model == 'logisticRegression') {
+      rv$model_results <- createLogReg(rv$target_var, rv$train_data, rv$test_data)
+      res <- rv$model_results
+      
+      output$modelTextSummary <- renderPrint({
+        cat("Accuracy:", round(as.numeric(res$accuracy, 3)), "\n")
+        cat("Kappa:", round(as.numeric(res$kappa, 3)), "\n")
+        cat("Macro Precision:", round(res$macro_metrics["precision"], 3), "\n")
+        cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
+        cat("Macro F1:", round(res$macro_metrics["f1"], 3))
+      })
     } else if (rv$model == 'naiveBayes') {
       
     } else if (rv$model == 'knn') {
@@ -361,6 +373,14 @@ server <- function(input, output) {
     } else if (rv$model == 'svm') {
       
     }
+    output$cmPlot <- renderPlot({
+      ggplot(res$cm_df, aes(x=Reference, y=Prediction, fill=Freq)) +
+        geom_tile(color = 'white') +
+        geom_text(aes(label=Freq), vjust=1) +
+        scale_fill_gradient(low='white', high='#006D2C') +
+        theme_bw() +
+        labs(title="Confusion Matrix Heatmap")
+    })
   })
 }
 

@@ -8,6 +8,7 @@ library(ggplot2)
 library(plotly)
 library(mice)
 library(missForest)
+library(nnet)
 library(caret)
 
 crash_df = read.csv("Data/crash_data_truncated.csv")
@@ -427,21 +428,63 @@ createRF <- function(targetVar, numTrees, varPerSplit, train_data, test_data){
     data = predictions,
     reference=test_data[[targetVar]]
   )
-  print(cm)
-  as.data.frame(cm$table)
+  by_class <- as.data.frame(cm$byClass)
+  # print(cm) print for testing
+  
+  list(
+    cm_df = as.data.frame(cm$table),
+    accuracy = as.numeric(cm$overall["Accuracy"]),
+    kappa = as.numeric(cm$overall["Kappa"]),
+    macro_metrics = c(
+      precision = mean(by_class$Precision, na.rm = TRUE),
+      recall    = mean(by_class$Sensitivity, na.rm = TRUE),
+      f1        = mean(by_class$F1, na.rm = TRUE)
+    ),
+    weighted_metrics = c(
+      precision = sum(by_class$Precision * colSums(cm$table) / sum(cm$table), na.rm = TRUE),
+      recall    = sum(by_class$Sensitivity * colSums(cm$table) / sum(cm$table), na.rm = TRUE),
+      f1        = sum(by_class$F1 * colSums(cm$table) / sum(cm$table), na.rm = TRUE)
+    )
+  )
 }
 # create logistic regression model
-createLogReg <- function(targetVar, dataList) {
+createLogReg <- function(targetVar, train_data, test_data) {
   if (targetVar == "Injury_Severity"){
     # create model to classify injury severity
-    
+    lrModel <- multinom(Injury_Severity ~ . - ACRS_Report_Type - Vehicle_Damage_Extent,
+                        data=train_data)
   } else if (targetVar == "ACRS_Report_Type") {
     # create model to classify ACRS report type
-    
+    lrModel <- multinom(ACRS_Report_Type ~ . - Injury_Severity - Vehicle_Damage_Extent,
+                        data=train_data)
   } else if (targetVar == "Vehicle_Damage_Extent") {
     # create model to classify vehicle damage extent
-    
+    lrModel <- multinom(Vehicle_Damage_Extent ~ . - ACRS_Report_Type - Injury_Severity,
+                        data=train_data)
   }
+  predictions <- predict(lrModel, newdata=test_data, type='class')
+  cm <- confusionMatrix(
+    data = predictions,
+    reference=test_data[[targetVar]]
+  )
+  by_class <- as.data.frame(cm$byClass)
+  # print(cm) print for testing
+  
+  list(
+    cm_df = as.data.frame(cm$table),
+    accuracy = as.numeric(cm$overall["Accuracy"]),
+    kappa = as.numeric(cm$overall["Kappa"]),
+    macro_metrics = c(
+      precision = mean(by_class$Precision, na.rm = TRUE),
+      recall    = mean(by_class$Sensitivity, na.rm = TRUE),
+      f1        = mean(by_class$F1, na.rm = TRUE)
+    ),
+    weighted_metrics = c(
+      precision = sum(by_class$Precision * colSums(cm$table) / sum(cm$table), na.rm = TRUE),
+      recall    = sum(by_class$Sensitivity * colSums(cm$table) / sum(cm$table), na.rm = TRUE),
+      f1        = sum(by_class$F1 * colSums(cm$table) / sum(cm$table), na.rm = TRUE)
+    )
+  )
 }
 # naive bayes model
 createNaiveBayes <- function(targetVar, useKFold, dataList) {
