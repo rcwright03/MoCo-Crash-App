@@ -10,6 +10,9 @@ library(mice)
 library(missForest)
 library(nnet)
 library(caret)
+library(e1071)
+library(naivebayes)
+library(class)
 
 crash_df = read.csv("Data/crash_data_truncated.csv")
 
@@ -487,30 +490,171 @@ createLogReg <- function(targetVar, train_data, test_data) {
   )
 }
 # naive bayes model
-createNaiveBayes <- function(targetVar, useKFold, dataList) {
+createNaiveBayes <- function(targetVar, useKFold, train_data, test_data) {
+  if (useKFold) {
+    train_control <- trainControl(
+      method='cv',
+      number = 5,
+      savePredictions=TRUE
+    )
+  }
   if (targetVar == "Injury_Severity"){
     # create model to classify injury severity
-    
+    if (useKFold) {
+      nbModel <- train(
+        Injury_Severity ~ . - ACRS_Report_Type - Vehicle_Damage_Extent,
+        data=train_data,
+        method="naive_bayes",
+        trControl = train_control
+      )
+    } else {
+      nbModel <- naive_bayes(Injury_Severity ~ . - ACRS_Report_Type - Vehicle_Damage_Extent,
+                            data=train_data)
+    }
   } else if (targetVar == "ACRS_Report_Type") {
     # create model to classify ACRS report type
-    
+    if (useKFold) {
+      nbModel <- train(
+        ACRS_Report_Type ~ . - Injury_Severity - Vehicle_Damage_Extent,
+        data=train_data,
+        method="naive_bayes",
+        trControl = train_control
+      )
+    } else {
+      nbModel <- naive_bayes(ACRS_Report_Type ~ . - Injury_Severity - Vehicle_Damage_Extent,
+                            data=train_data)
+    }
   } else if (targetVar == "Vehicle_Damage_Extent") {
     # create model to classify vehicle damage extent
-    
+    if (useKFold) {
+      nbModel <- train(
+        Vehicle_Damage_Extent ~ . - Injury_Severity - ACRS_Report_Type,
+        data=train_data,
+        method="naive_bayes",
+        trControl = train_control
+      )
+    } else {
+      nbModel <- naive-bayes(Vehicle_Damage_Extent ~ . - Injury_Severity - ACRS_Report_Type,
+                            data=train_data)
+    }
   }
+  predictions <- predict(nbModel, newdata=test_data, type='prob')
+  cm <- confusionMatrix(
+    data = predictions,
+    reference=test_data[[targetVar]]
+  )
+  by_class <- as.data.frame(cm$byClass)
+  # print(cm) print for testing
+  
+  list(
+    cm_df = as.data.frame(cm$table),
+    accuracy = as.numeric(cm$overall["Accuracy"]),
+    kappa = as.numeric(cm$overall["Kappa"]),
+    macro_metrics = c(
+      precision = mean(by_class$Precision, na.rm = TRUE),
+      recall    = mean(by_class$Sensitivity, na.rm = TRUE),
+      f1        = mean(by_class$F1, na.rm = TRUE)
+    ),
+    weighted_metrics = c(
+      precision = sum(by_class$Precision * colSums(cm$table) / sum(cm$table), na.rm = TRUE),
+      recall    = sum(by_class$Sensitivity * colSums(cm$table) / sum(cm$table), na.rm = TRUE),
+      f1        = sum(by_class$F1 * colSums(cm$table) / sum(cm$table), na.rm = TRUE)
+    )
+  )
 }
 # knn model
-createKNN <- function(targetVar, kVal, dataList) {
+createKNN <- function(targetVar, kVal, train_data, test_data) {
   if (targetVar == "Injury_Severity"){
     # create model to classify injury severity
+    # remove unwanted features
+    train_x <- train_data %>%
+      select(-ACRS_Report_Type, -Vehicle_Damage_Extent)
+    test_x <- test_data %>%
+      select(-ACRS_Report_Type, -Vehicle_Damage_Extent)
+    # convert factors to numeric via one-hot encoding
+    train_x <- model.matrix(~ . -1, data = train_x)
+    test_x  <- model.matrix(~ . -1, data = test_x)
+    # scale data
+    train_x <- scale(train_x)
     
+    test_x <- scale(
+      test_x,
+      center = attr(train_x, "scaled:center"),
+      scale  = attr(train_x, "scaled:scale")
+    )
+    
+    knn_pred <- knn(train=train_x,
+                    test=test_y,
+                    cl=train_data[[targetVar]],
+                    k=kVal)
   } else if (targetVar == "ACRS_Report_Type") {
     # create model to classify ACRS report type
+    # remove unwanted features
+    train_x <- train_data %>%
+      select(-Injury_Severity, -Vehicle_Damage_Extent)
+    test_x <- test_data %>%
+      select(-Injury_Severity, -Vehicle_Damage_Extent)
+    # convert factors to numeric via one-hot encoding
+    train_x <- model.matrix(~ . -1, data = train_x)
+    test_x  <- model.matrix(~ . -1, data = test_x)
+    # scale data
+    train_x <- scale(train_x)
     
+    test_x <- scale(
+      test_x,
+      center = attr(train_x, "scaled:center"),
+      scale  = attr(train_x, "scaled:scale")
+    )
+    
+    knn_pred <- knn(train=train_x,
+                    test=test_x,
+                    cl=train_data[[targetVar]],
+                    k=kVal)
   } else if (targetVar == "Vehicle_Damage_Extent") {
     # create model to classify vehicle damage extent
+    # remove unwanted features
+    train_x <- train_data %>%
+      select(-ACRS_Report_Type, -Injury_Severity)
+    test_x <- test_data %>%
+      select(-ACRS_Report_Type, -Injury_Severity)
+    # convert factors to numeric via one-hot encoding
+    train_x <- model.matrix(~ . -1, data = train_x)
+    test_x  <- model.matrix(~ . -1, data = test_x)
+    # scale data
+    train_x <- scale(train_x)
     
+    test_x <- scale(
+      test_x,
+      center = attr(train_x, "scaled:center"),
+      scale  = attr(train_x, "scaled:scale")
+    )
+    knn_pred <- knn(train=train_x,
+                    test=test_x,
+                    cl=train_data[[targetVar]],
+                    k=kVal)
   }
+  cm <- confusionMatrix(
+    data=knn_pred,
+    reference=test_data[[targetVar]]
+  )
+  by_class <- as.data.frame(cm$byClass)
+  # print(cm) print for testing
+  
+  list(
+    cm_df = as.data.frame(cm$table),
+    accuracy = as.numeric(cm$overall["Accuracy"]),
+    kappa = as.numeric(cm$overall["Kappa"]),
+    macro_metrics = c(
+      precision = mean(by_class$Precision, na.rm = TRUE),
+      recall    = mean(by_class$Sensitivity, na.rm = TRUE),
+      f1        = mean(by_class$F1, na.rm = TRUE)
+    ),
+    weighted_metrics = c(
+      precision = sum(by_class$Precision * colSums(cm$table) / sum(cm$table), na.rm = TRUE),
+      recall    = sum(by_class$Sensitivity * colSums(cm$table) / sum(cm$table), na.rm = TRUE),
+      f1        = sum(by_class$F1 * colSums(cm$table) / sum(cm$table), na.rm = TRUE)
+    )
+  )
 }
 # svm model
 createSVM <- function(targetVar, kernelType, costParam, dataList) {

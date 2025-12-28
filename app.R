@@ -207,7 +207,7 @@ ui <- dashboardPage(
             ),
             conditionalPanel(
               condition = "input.modelInput == 'knn'",
-              sliderInput('kInput', 'Select K Value:', min=1, max=10, value=3, step=1)
+              sliderInput('kInput', 'Select K Value:', min=1, max=5, value=3, step=1)
             ),
             conditionalPanel(
               condition = "input.modelInput == 'svm'",
@@ -367,9 +367,27 @@ server <- function(input, output) {
         cat("Macro F1:", round(res$macro_metrics["f1"], 3))
       })
     } else if (rv$model == 'naiveBayes') {
+      useKFold <- input$kFoldInput
+      rv$model_results <- createNaiveBayes(rv$target_var, useKFold, rv$train_data, rv$test_data)
+      res <- rv$model_results
       
+      output$modelTextSummary <- renderPrint({
+        cat("Accuracy:", round(as.numeric(res$accuracy, 3)), "\n")
+        cat("Kappa:", round(as.numeric(res$kappa, 3)), "\n")
+        cat("Macro Precision:", round(res$macro_metrics["precision"], 3), "\n")
+        cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
+        cat("Macro F1:", round(res$macro_metrics["f1"], 3))
+      })
     } else if (rv$model == 'knn') {
-      
+      rv$model_results <- createKNN(rv$target_var, input$kInput, rv$train_data, rv$test_data)
+      res <- rv$model_results
+      output$modelTextSummary <- renderPrint({
+        cat("Accuracy:", round(as.numeric(res$accuracy, 3)), "\n")
+        cat("Kappa:", round(as.numeric(res$kappa, 3)), "\n")
+        cat("Macro Precision:", round(res$macro_metrics["precision"], 3), "\n")
+        cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
+        cat("Macro F1:", round(res$macro_metrics["f1"], 3))
+      })
     } else if (rv$model == 'svm') {
       
     }
