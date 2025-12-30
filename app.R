@@ -190,7 +190,7 @@ ui <- dashboardPage(
               'Logistic Regression' = 'logisticRegression',
               'Naive Bayes' = 'naiveBayes',
               'KNN' = 'knn',
-              'Support Vector Machine' == 'svm'
+              'Support Vector Machine' = 'svm'
             )),
             # add little blurbs talking about how each model works
             conditionalPanel(
@@ -212,9 +212,9 @@ ui <- dashboardPage(
             conditionalPanel(
               condition = "input.modelInput == 'svm'",
               selectInput('kernelInput', 'Select Kernel Type:', choices=c(
-                'Linear' == 'linear',
-                'Radial' == 'radial',
-                'Polynomial' == 'polynomial'
+                'Linear' = 'linear',
+                'Radial' = 'radial',
+                'Polynomial' = 'polynomial'
               )),
               sliderInput('costParam', 'Cost Parameter:', min=0.1, max=10, value=1, step=0.1)
             ),
@@ -389,7 +389,15 @@ server <- function(input, output) {
         cat("Macro F1:", round(res$macro_metrics["f1"], 3))
       })
     } else if (rv$model == 'svm') {
-      
+      rv$model_results <- createSVM(rv$target_var, input$kernelInput, input$costParam, rv$train_data, rv$test_data)
+      res <- rv$model_results
+      output$modelTextSummary <- renderPrint({
+        cat("Accuracy:", round(as.numeric(res$accuracy, 3)), "\n")
+        cat("Kappa:", round(as.numeric(res$kappa, 3)), "\n")
+        cat("Macro Precision:", round(res$macro_metrics["precision"], 3), "\n")
+        cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
+        cat("Macro F1:", round(res$macro_metrics["f1"], 3))
+      })
     }
     output$cmPlot <- renderPlot({
       ggplot(res$cm_df, aes(x=Reference, y=Prediction, fill=Freq)) +
