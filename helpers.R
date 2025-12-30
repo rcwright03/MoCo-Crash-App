@@ -495,13 +495,14 @@ createNaiveBayes <- function(targetVar, useKFold, train_data, test_data) {
     train_control <- trainControl(
       method='cv',
       number = 5,
-      savePredictions=TRUE
+      savePredictions='final',
+      classProbs=FALSE
     )
   }
   if (targetVar == "Injury_Severity"){
     # create model to classify injury severity
     if (useKFold) {
-      nbModel <- train(
+      nbModel <- caret::train(
         Injury_Severity ~ . - ACRS_Report_Type - Vehicle_Damage_Extent,
         data=train_data,
         method="naive_bayes",
@@ -514,7 +515,7 @@ createNaiveBayes <- function(targetVar, useKFold, train_data, test_data) {
   } else if (targetVar == "ACRS_Report_Type") {
     # create model to classify ACRS report type
     if (useKFold) {
-      nbModel <- train(
+      nbModel <- caret::train(
         ACRS_Report_Type ~ . - Injury_Severity - Vehicle_Damage_Extent,
         data=train_data,
         method="naive_bayes",
@@ -527,18 +528,18 @@ createNaiveBayes <- function(targetVar, useKFold, train_data, test_data) {
   } else if (targetVar == "Vehicle_Damage_Extent") {
     # create model to classify vehicle damage extent
     if (useKFold) {
-      nbModel <- train(
+      nbModel <- caret::train(
         Vehicle_Damage_Extent ~ . - Injury_Severity - ACRS_Report_Type,
         data=train_data,
         method="naive_bayes",
         trControl = train_control
       )
     } else {
-      nbModel <- naive-bayes(Vehicle_Damage_Extent ~ . - Injury_Severity - ACRS_Report_Type,
+      nbModel <- naive_bayes(Vehicle_Damage_Extent ~ . - Injury_Severity - ACRS_Report_Type,
                             data=train_data)
     }
   }
-  predictions <- predict(nbModel, newdata=test_data, type='prob')
+  predictions <- predict(nbModel, newdata=test_data)
   cm <- confusionMatrix(
     data = predictions,
     reference=test_data[[targetVar]]
@@ -669,6 +670,7 @@ createSVM <- function(targetVar, kernelType, costParam, train_data, test_data) {
                       )
   } else if (targetVar == "ACRS_Report_Type") {
     # create model to classify ACRS report type
+    print(Sys.time())
     svmModel <- svm(ACRS_Report_Type ~ . - Injury_Severity - Vehicle_Damage_Extent,
                     data=train_data,
                     type='C-classification',
@@ -686,6 +688,7 @@ createSVM <- function(targetVar, kernelType, costParam, train_data, test_data) {
                     cost=costParam
     )
   }
+  print(Sys.time())
   predictions <- predict(svmModel, newdata=test_data)
   cm <- confusionMatrix(
     data = predictions,
@@ -710,3 +713,4 @@ createSVM <- function(targetVar, kernelType, costParam, train_data, test_data) {
     )
   )
 }
+

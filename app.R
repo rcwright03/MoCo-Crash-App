@@ -196,7 +196,10 @@ ui <- dashboardPage(
             conditionalPanel(
               condition = "input.modelInput == 'randomForest'",
               sliderInput('numTrees', 'Number of Trees:', min=100, max=500, value=300, step=50),
-              sliderInput('varPerSplit', 'Mtry (square root of number of variables at each split):', min=1, max=18, value=4, step=1)
+              sliderInput('varPerSplit', 'Mtry (square root of number of variables at each split):', min=1, max=18, value=4, step=1),
+              helpText(
+                HTML("<strong>Note: a larger number of trees may result in a longer training time.</strong>")
+                     )
             ),
             conditionalPanel(
               condition = "input.modelInput == 'logisticRegression'"
@@ -207,7 +210,10 @@ ui <- dashboardPage(
             ),
             conditionalPanel(
               condition = "input.modelInput == 'knn'",
-              sliderInput('kInput', 'Select K Value:', min=1, max=5, value=3, step=1)
+              sliderInput('kInput', 'Select K Value:', min=1, max=5, value=3, step=1),
+              helpText(
+                HTML("<strong>Note: a larger K value may result in a longer training time.</strong>")
+              )
             ),
             conditionalPanel(
               condition = "input.modelInput == 'svm'",
@@ -216,9 +222,16 @@ ui <- dashboardPage(
                 'Radial' = 'radial',
                 'Polynomial' = 'polynomial'
               )),
-              sliderInput('costParam', 'Cost Parameter:', min=0.1, max=10, value=1, step=0.1)
+              sliderInput('costParam', 'Cost Parameter:', min=0.1, max=10, value=1, step=0.1),
+              helpText(
+                HTML("<strong>Note: SVMs may require a very long training time (> 20 mins). They are not recommended for viewing results.</strong>")
+              )
             ),
-            actionButton('trainButton', 'Train Model', icon=icon('gear'), class='btn-success')
+            actionButton('trainButton', 'Train Model', icon=icon('gear'), class='btn-success'),
+            span(
+              style="margin-left: 15px;",
+              htmlOutput("model_status")
+            )
           )
         ),
         fluidRow(
@@ -283,19 +296,24 @@ server <- function(input, output) {
     })
   })
   observeEvent(input$preprocessDataButton, {
-    impute <- input$missingCheck
-    trainingSize <- input$trainingInput
-    splits <- processData(trainingSize, impute)
-    
-    rv$train_data <- splits$training
-    rv$test_data <- splits$testing
-    
-    # preprocess status text
-    output$preprocess_status <- renderUI({
-      tags$span(
-        style = "color: green; font-weight: bold;",
-        "✓ Data successfully preprocessed"
-      )
+    withProgress(message="Processing data...", value=0, {
+      incProgress(0.1)
+      impute <- input$missingCheck
+      trainingSize <- input$trainingInput
+      incProgress(0.2)
+      splits <- processData(trainingSize, impute)
+      incProgress(0.5)
+      rv$train_data <- splits$training
+      rv$test_data <- splits$testing
+      
+      # preprocess status text
+      output$preprocess_status <- renderUI({
+        tags$span(
+          style = "color: green; font-weight: bold;",
+          "✓ Data successfully preprocessed"
+        )
+      })
+      incProgress(0.2)
     })
     output$preprocess_summary <- renderPrint({
       # display preprocess stats
@@ -339,67 +357,42 @@ server <- function(input, output) {
   observeEvent(input$trainButton, {
     rv$model <- input$modelInput
     rv$target_var <- input$variableSelection
-    # train model fcn
-    if(rv$model == 'randomForest'){
-      # create random forest model
-      rv$model_results <- createRF(rv$target_var, input$numTrees, input$varPerSplit, rv$train_data, rv$test_data)
-      res <- rv$model_results
-      
-      # print confusion matrix from model, other stats (num trees, etc.)
-      output$modelTextSummary <- renderPrint({
-        cat("Accuracy:", round(as.numeric(res$accuracy, 3)), "\n")
-        cat("Kappa:", round(as.numeric(res$kappa, 3)), "\n")
-        cat("Macro Precision:", round(res$macro_metrics["precision"], 3), "\n")
-        cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
-        cat("Macro F1:", round(res$macro_metrics["f1"], 3))
-      })
-      
-      
-    } else if (rv$model == 'logisticRegression') {
-      rv$model_results <- createLogReg(rv$target_var, rv$train_data, rv$test_data)
-      res <- rv$model_results
-      
-      output$modelTextSummary <- renderPrint({
-        cat("Accuracy:", round(as.numeric(res$accuracy, 3)), "\n")
-        cat("Kappa:", round(as.numeric(res$kappa, 3)), "\n")
-        cat("Macro Precision:", round(res$macro_metrics["precision"], 3), "\n")
-        cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
-        cat("Macro F1:", round(res$macro_metrics["f1"], 3))
-      })
-    } else if (rv$model == 'naiveBayes') {
-      useKFold <- input$kFoldInput
-      rv$model_results <- createNaiveBayes(rv$target_var, useKFold, rv$train_data, rv$test_data)
-      res <- rv$model_results
-      
-      output$modelTextSummary <- renderPrint({
-        cat("Accuracy:", round(as.numeric(res$accuracy, 3)), "\n")
-        cat("Kappa:", round(as.numeric(res$kappa, 3)), "\n")
-        cat("Macro Precision:", round(res$macro_metrics["precision"], 3), "\n")
-        cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
-        cat("Macro F1:", round(res$macro_metrics["f1"], 3))
-      })
-    } else if (rv$model == 'knn') {
-      rv$model_results <- createKNN(rv$target_var, input$kInput, rv$train_data, rv$test_data)
-      res <- rv$model_results
-      output$modelTextSummary <- renderPrint({
-        cat("Accuracy:", round(as.numeric(res$accuracy, 3)), "\n")
-        cat("Kappa:", round(as.numeric(res$kappa, 3)), "\n")
-        cat("Macro Precision:", round(res$macro_metrics["precision"], 3), "\n")
-        cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
-        cat("Macro F1:", round(res$macro_metrics["f1"], 3))
-      })
-    } else if (rv$model == 'svm') {
-      rv$model_results <- createSVM(rv$target_var, input$kernelInput, input$costParam, rv$train_data, rv$test_data)
-      res <- rv$model_results
-      output$modelTextSummary <- renderPrint({
-        cat("Accuracy:", round(as.numeric(res$accuracy, 3)), "\n")
-        cat("Kappa:", round(as.numeric(res$kappa, 3)), "\n")
-        cat("Macro Precision:", round(res$macro_metrics["precision"], 3), "\n")
-        cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
-        cat("Macro F1:", round(res$macro_metrics["f1"], 3))
-      })
-    }
+    
+    # progress bar for visualization
+    withProgress(message='Training model...', value=0, {
+      incProgress(0.2)
+      if(rv$model == 'randomForest'){
+        # create random forest model
+        rv$model_results <- createRF(rv$target_var, input$numTrees, input$varPerSplit, rv$train_data, rv$test_data)
+      } else if (rv$model == 'logisticRegression') {
+        rv$model_results <- createLogReg(rv$target_var, rv$train_data, rv$test_data)
+      } else if (rv$model == 'naiveBayes') {
+        useKFold <- input$kFoldInput
+        rv$model_results <- createNaiveBayes(rv$target_var, useKFold, rv$train_data, rv$test_data)
+      } else if (rv$model == 'knn') {
+        rv$model_results <- createKNN(rv$target_var, input$kInput, rv$train_data, rv$test_data)
+      } else if (rv$model == 'svm') {
+        rv$model_results <- createSVM(rv$target_var, input$kernelInput, input$costParam, rv$train_data, rv$test_data)
+      }
+      incProgress(0.8)
+    })
+    
+    res <- rv$model_results
+    output$modelTextSummary <- renderPrint({
+      cat("Accuracy:", round(as.numeric(res$accuracy, 3)), "\n")
+      cat("Kappa:", round(as.numeric(res$kappa, 3)), "\n")
+      cat("Macro Precision:", round(res$macro_metrics["precision"], 3), "\n")
+      cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
+      cat("Macro F1:", round(res$macro_metrics["f1"], 3))
+    })
+    output$model_status <- renderUI({
+      tags$span(
+        style = "color: green; font-weight: bold;",
+        "✓ Model successfully trained"
+      )
+    })
     output$cmPlot <- renderPlot({
+      req(res$cm_df)
       ggplot(res$cm_df, aes(x=Reference, y=Prediction, fill=Freq)) +
         geom_tile(color = 'white') +
         geom_text(aes(label=Freq), vjust=1) +
