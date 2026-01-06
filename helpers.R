@@ -398,14 +398,6 @@ processData <- function(trainingSize, impute=FALSE) {
 # valCheck
 # what to do with validation check? idk
 
-# target variable
-# how to handle training based on target variable?
-# use if statement (if targetvar = injury severity --> train model on everything but acrs report type and vehicle damage extent)
-    # lengthy but could work
-# have separate dfs for each target variable
-    # memory heavy
-# 
-
 # create random forest model
 createRF <- function(targetVar, numTrees, varPerSplit, train_data, test_data){
   library(randomForest)
@@ -434,6 +426,44 @@ createRF <- function(targetVar, numTrees, varPerSplit, train_data, test_data){
   by_class <- as.data.frame(cm$byClass)
   # print(cm) print for testing
   
+  # # get feature importance
+  # X_test <- test_data[, !(names(test_data) %in% targetVar), drop = FALSE]
+  # 
+  # y_test <- test_data[[targetVar]]
+  # predictor <- Predictor$new(
+  #   model = rfModel,
+  #   data  = X_test,
+  #   y     = y_test,
+  #   predict.fun = function(m, newdata) {
+  #     predict(m, newdata = newdata, type = "class")
+  #   }
+  # )
+  # 
+  # featureImportance <- FeatureImp$new(
+  #   predictor,
+  #   loss = "ce",     # classification error
+  #   n.repetitions = 5
+  # )
+  # 
+  # feature_importance_df <- featureImportance$results %>%
+  #   select(feature, importance) %>%
+  #   arrange(desc(importance)) %>%
+  #   rename(
+  #     Feature = feature,
+  #     Importance = importance
+  #   )
+  # 
+  # feature_importance_df <- featureImportance$results[, c("feature", "importance")]
+  # 
+  # # rename columns
+  # colnames(feature_importance_df) <- c("Feature", "Importance")
+  # 
+  # # sort by Importance descending
+  # feature_importance_df <- feature_importance_df[
+  #   order(feature_importance_df$Importance, decreasing = TRUE),
+  # ]
+  
+  # return confusion matrix, metrics, and feature importance
   list(
     cm_df = as.data.frame(cm$table),
     accuracy = as.numeric(cm$overall["Accuracy"]),
@@ -448,6 +478,7 @@ createRF <- function(targetVar, numTrees, varPerSplit, train_data, test_data){
       recall    = sum(by_class$Sensitivity * colSums(cm$table) / sum(cm$table), na.rm = TRUE),
       f1        = sum(by_class$F1 * colSums(cm$table) / sum(cm$table), na.rm = TRUE)
     )
+    # feature_importance = feature_importance_df
   )
 }
 # create logistic regression model

@@ -238,12 +238,21 @@ ui <- dashboardPage(
           box(
             title='Model Training Results', solidHeader=TRUE, width=12, status='success',
             verbatimTextOutput('modelTextSummary'),
-            plotOutput('cmPlot')
+            # display feature importance for model
+            plotOutput('importancePlot')
           )
         )
       ),
       tabItem(
-        tabName="visualizationTab"
+        tabName="visualizationTab",
+        fluidRow(
+          box(
+            title='Model Feature Evaluation', solidHeader=TRUE, width=12, status='success',
+            # display correlation matrix
+            # let users enter features to determine output and create visualization
+            plotOutput('cmPlot')
+          )
+        )
       )
     )
   )
@@ -255,7 +264,8 @@ server <- function(input, output) {
     test_data = NULL,
     model = NULL,
     target_var = NULL,
-    model_results = NULL
+    model_results = NULL,
+    #feature_importance = NULL
   )
   
   output$grouped_crash_table <- renderDT({
@@ -385,12 +395,22 @@ server <- function(input, output) {
       cat("Macro Recall:", round(res$macro_metrics["recall"], 3), "\n")
       cat("Macro F1:", round(res$macro_metrics["f1"], 3))
     })
+    
     output$model_status <- renderUI({
       tags$span(
         style = "color: green; font-weight: bold;",
         "✓ Model successfully trained"
       )
     })
+    
+    # output$importancePlot <- renderPlot({
+    #   req(res$feature_importance)
+    #   ggplot(res$feature_importance, aes(x=Importance, y=Feature)) +
+    #     geom_tile(color='cyan') +
+    #     geom_text(aes(label=Feature)) +
+    #     labs(title="Feature Importance Plot")
+    # })
+    
     output$cmPlot <- renderPlot({
       req(res$cm_df)
       ggplot(res$cm_df, aes(x=Reference, y=Prediction, fill=Freq)) +
