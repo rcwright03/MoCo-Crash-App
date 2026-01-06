@@ -116,7 +116,6 @@ ui <- dashboardPage(
             title='Data Preprocessing Options', solidHeader=TRUE, width=12, status='info',
             sliderInput("trainingInput", "Select Training Set Size (%):", min=50, max=90, value=80, step=5),
             checkboxInput("missingCheck", "Handle Missing, N/A, and Unknown Values (mode imputation)", FALSE),
-            checkboxInput("validationCheck", "Use Validation Set", FALSE),
             selectInput("variableSelection", "Select Target Variable (ACRS Report Type by default):", choices=c(
               "ACRS_Report_Type" = 'ACRS_Report_Type',
               "Injury_Severity" = 'Injury_Severity',
@@ -196,7 +195,7 @@ ui <- dashboardPage(
             conditionalPanel(
               condition = "input.modelInput == 'randomForest'",
               sliderInput('numTrees', 'Number of Trees:', min=100, max=500, value=300, step=50),
-              sliderInput('varPerSplit', 'Mtry (square root of number of variables at each split):', min=1, max=18, value=4, step=1),
+              sliderInput('varPerSplit', 'Mtry (square root of number of variables at each split):', min=1, max=15, value=4, step=1),
               helpText(
                 HTML("<strong>Note: a larger number of trees may result in a longer training time.</strong>")
                      )
@@ -238,8 +237,14 @@ ui <- dashboardPage(
           box(
             title='Model Training Results', solidHeader=TRUE, width=12, status='success',
             verbatimTextOutput('modelTextSummary'),
-            # display feature importance for model
-            plotOutput('importancePlot')
+            plotOutput('cmPlot'),
+            
+            # display another plot for model results, dependent on the model used
+            conditionalPanel(
+              condition = "input.modelInput == 'randomForest'",
+              br(),
+              plotOutput('featureImportancePlot')
+            )
           )
         )
       ),
@@ -250,7 +255,6 @@ ui <- dashboardPage(
             title='Model Feature Evaluation', solidHeader=TRUE, width=12, status='success',
             # display correlation matrix
             # let users enter features to determine output and create visualization
-            plotOutput('cmPlot')
           )
         )
       )
@@ -403,14 +407,6 @@ server <- function(input, output) {
       )
     })
     
-    # output$importancePlot <- renderPlot({
-    #   req(res$feature_importance)
-    #   ggplot(res$feature_importance, aes(x=Importance, y=Feature)) +
-    #     geom_tile(color='cyan') +
-    #     geom_text(aes(label=Feature)) +
-    #     labs(title="Feature Importance Plot")
-    # })
-    
     output$cmPlot <- renderPlot({
       req(res$cm_df)
       ggplot(res$cm_df, aes(x=Reference, y=Prediction, fill=Freq)) +
@@ -419,6 +415,11 @@ server <- function(input, output) {
         scale_fill_gradient(low='white', high='#006D2C') +
         theme_bw() +
         labs(title="Confusion Matrix Heatmap")
+    })
+    
+    output$featureImportancePlot <- renderPlot({
+      req(res$model)
+      varImpPlot(res$model, main='Feature Importance Table for Random Forest Model')
     })
   })
 }

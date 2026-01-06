@@ -395,9 +395,6 @@ processData <- function(trainingSize, impute=FALSE) {
   return(list(training=training_data, testing=testing_data))
 }
 
-# valCheck
-# what to do with validation check? idk
-
 # create random forest model
 createRF <- function(targetVar, numTrees, varPerSplit, train_data, test_data){
   library(randomForest)
@@ -426,48 +423,12 @@ createRF <- function(targetVar, numTrees, varPerSplit, train_data, test_data){
   by_class <- as.data.frame(cm$byClass)
   # print(cm) print for testing
   
-  # # get feature importance
-  # X_test <- test_data[, !(names(test_data) %in% targetVar), drop = FALSE]
-  # 
-  # y_test <- test_data[[targetVar]]
-  # predictor <- Predictor$new(
-  #   model = rfModel,
-  #   data  = X_test,
-  #   y     = y_test,
-  #   predict.fun = function(m, newdata) {
-  #     predict(m, newdata = newdata, type = "class")
-  #   }
-  # )
-  # 
-  # featureImportance <- FeatureImp$new(
-  #   predictor,
-  #   loss = "ce",     # classification error
-  #   n.repetitions = 5
-  # )
-  # 
-  # feature_importance_df <- featureImportance$results %>%
-  #   select(feature, importance) %>%
-  #   arrange(desc(importance)) %>%
-  #   rename(
-  #     Feature = feature,
-  #     Importance = importance
-  #   )
-  # 
-  # feature_importance_df <- featureImportance$results[, c("feature", "importance")]
-  # 
-  # # rename columns
-  # colnames(feature_importance_df) <- c("Feature", "Importance")
-  # 
-  # # sort by Importance descending
-  # feature_importance_df <- feature_importance_df[
-  #   order(feature_importance_df$Importance, decreasing = TRUE),
-  # ]
-  
-  # return confusion matrix, metrics, and feature importance
+  # return confusion matrix, metrics, and model
   list(
     cm_df = as.data.frame(cm$table),
     accuracy = as.numeric(cm$overall["Accuracy"]),
     kappa = as.numeric(cm$overall["Kappa"]),
+    model = rfModel, # return model for eventual feature importance plot
     macro_metrics = c(
       precision = mean(by_class$Precision, na.rm = TRUE),
       recall    = mean(by_class$Sensitivity, na.rm = TRUE),
@@ -478,7 +439,6 @@ createRF <- function(targetVar, numTrees, varPerSplit, train_data, test_data){
       recall    = sum(by_class$Sensitivity * colSums(cm$table) / sum(cm$table), na.rm = TRUE),
       f1        = sum(by_class$F1 * colSums(cm$table) / sum(cm$table), na.rm = TRUE)
     )
-    # feature_importance = feature_importance_df
   )
 }
 # create logistic regression model
@@ -745,3 +705,9 @@ createSVM <- function(targetVar, kernelType, costParam, train_data, test_data) {
   )
 }
 
+# tables to display for each model
+# random forest: feature importance table
+# logistic regression: feature coefficient table
+# naive bayes: mean and variance per feature per class - top features per class
+# knn: graph of distance to nearest neighbors for correct vs incorrect predictions
+# svm: number of support vectors
