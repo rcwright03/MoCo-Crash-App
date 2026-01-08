@@ -249,6 +249,11 @@ ui <- dashboardPage(
               condition = "input.modelInput == 'logisticRegression'",
               br(),
               DTOutput('featureCoefficientTable')
+            ),
+            conditionalPanel(
+              condition = "input.modelInput == 'naiveBayes'",
+              br(),
+              DTOutput('featureProbabilityTable')
             )
           )
         )
@@ -402,6 +407,16 @@ server <- function(input, output) {
       } else if (rv$model == 'naiveBayes') {
         useKFold <- input$kFoldInput
         rv$model_results <- createNaiveBayes(rv$target_var, useKFold, rv$train_data, rv$test_data)
+        output$featureProbabilityTable <- renderDT({
+          req(res$feature_probs)
+          datatable(res$feature_probs,
+                    options=list(pagelength=10,
+                                 scrollX=TRUE,
+                                 autowidth=TRUE,
+                                 search=list(regex=FALSE, caseInsensitive=TRUE),
+                                 searchCols=NULL),
+                    filter='top')
+        })
       } else if (rv$model == 'knn') {
         rv$model_results <- createKNN(rv$target_var, input$kInput, rv$train_data, rv$test_data)
       } else if (rv$model == 'svm') {

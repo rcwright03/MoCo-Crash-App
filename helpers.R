@@ -493,6 +493,7 @@ createLogReg <- function(targetVar, train_data, test_data) {
 }
 # naive bayes model
 createNaiveBayes <- function(targetVar, useKFold, train_data, test_data) {
+  # set train control for cv
   if (useKFold) {
     train_control <- trainControl(
       method='cv',
@@ -508,11 +509,16 @@ createNaiveBayes <- function(targetVar, useKFold, train_data, test_data) {
         Injury_Severity ~ . - ACRS_Report_Type - Vehicle_Damage_Extent,
         data=train_data,
         method="naive_bayes",
-        trControl = train_control
+        trControl = train_control,
+        tuneGrid = expand.grid(
+          laplace = 1,
+          usekernel = FALSE,
+          adjust = 1
+        )
       )
     } else {
       nbModel <- naive_bayes(Injury_Severity ~ . - ACRS_Report_Type - Vehicle_Damage_Extent,
-                            data=train_data)
+                            data=train_data, laplace=1)
     }
   } else if (targetVar == "ACRS_Report_Type") {
     # create model to classify ACRS report type
@@ -521,11 +527,16 @@ createNaiveBayes <- function(targetVar, useKFold, train_data, test_data) {
         ACRS_Report_Type ~ . - Injury_Severity - Vehicle_Damage_Extent,
         data=train_data,
         method="naive_bayes",
-        trControl = train_control
+        trControl = train_control,
+        tuneGrid = expand.grid(
+          laplace = 1,
+          usekernel = FALSE,
+          adjust = 1
+        )
       )
     } else {
       nbModel <- naive_bayes(ACRS_Report_Type ~ . - Injury_Severity - Vehicle_Damage_Extent,
-                            data=train_data)
+                            data=train_data, laplace=1)
     }
   } else if (targetVar == "Vehicle_Damage_Extent") {
     # create model to classify vehicle damage extent
@@ -534,11 +545,16 @@ createNaiveBayes <- function(targetVar, useKFold, train_data, test_data) {
         Vehicle_Damage_Extent ~ . - Injury_Severity - ACRS_Report_Type,
         data=train_data,
         method="naive_bayes",
-        trControl = train_control
+        trControl = train_control,
+        tuneGrid = expand.grid(
+          laplace = 1,
+          usekernel = FALSE,
+          adjust = 1
+        )
       )
     } else {
       nbModel <- naive_bayes(Vehicle_Damage_Extent ~ . - Injury_Severity - ACRS_Report_Type,
-                            data=train_data)
+                            data=train_data, laplace=1)
     }
   }
   predictions <- predict(nbModel, newdata=test_data)
@@ -549,10 +565,15 @@ createNaiveBayes <- function(targetVar, useKFold, train_data, test_data) {
   by_class <- as.data.frame(cm$byClass)
   # print(cm) print for testing
   
+  # get mean and variance tables
+  model_obj <- if (useKFold) nbModel$finalModel else nbModel
+  feature_probs <- extract_nb_categorical_probs(model_obj)
+  
   list(
     cm_df = as.data.frame(cm$table),
     accuracy = as.numeric(cm$overall["Accuracy"]),
     kappa = as.numeric(cm$overall["Kappa"]),
+    feature_probs = feature_probs,
     macro_metrics = c(
       precision = mean(by_class$Precision, na.rm = TRUE),
       recall    = mean(by_class$Sensitivity, na.rm = TRUE),
@@ -565,6 +586,49 @@ createNaiveBayes <- function(targetVar, useKFold, train_data, test_data) {
     )
   )
 }
+
+# naive bayes helper fcn
+extract_nb_categorical_probs <- function(model_obj) {
+  tables <- model_obj$tables
+  
+  prob_list <- lapply(names(tables), function(feature) {
+    tbl <- tables[[feature]]
+    
+    # if not using CV --> in table format
+    if (is.table(tbl)) {
+      df <- as.data.frame(tbl)
+      colnames(df) <- c("level", "class", "probability")
+      df$feature <- feature
+      return(df)
+    }
+    
+    # if using CV --> in matrix format
+    if (is.matrix(tbl) && !all(c("mean", "sd") %in% colnames(tbl))) {
+      df <- as.data.frame(tbl)
+      df$class <- rownames(df)
+      
+      df_long <- tidyr::pivot_longer(
+        df,
+        cols = -class,
+        names_to = "level",
+        values_to = "probability"
+      )
+      
+      df_long$feature <- feature
+      return(df_long)
+    }
+    
+    # if features are numeric, ignore them
+    NULL
+  })
+  
+  probs_df <- do.call(rbind, prob_list)
+  
+  probs_df[, c("class", "feature", "level", "probability")]
+}
+
+
+
 # knn model
 createKNN <- function(targetVar, kVal, train_data, test_data) {
   if (targetVar == "Injury_Severity"){
