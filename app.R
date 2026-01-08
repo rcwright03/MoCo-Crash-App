@@ -239,11 +239,16 @@ ui <- dashboardPage(
             verbatimTextOutput('modelTextSummary'),
             plotOutput('cmPlot'),
             
-            # display another plot for model results, dependent on the model used
+            # display another plot for model results, depending on the model used
             conditionalPanel(
               condition = "input.modelInput == 'randomForest'",
               br(),
               plotOutput('featureImportancePlot')
+            ),
+            conditionalPanel(
+              condition = "input.modelInput == 'logisticRegression'",
+              br(),
+              DTOutput('featureCoefficientTable')
             )
           )
         )
@@ -378,8 +383,22 @@ server <- function(input, output) {
       if(rv$model == 'randomForest'){
         # create random forest model
         rv$model_results <- createRF(rv$target_var, input$numTrees, input$varPerSplit, rv$train_data, rv$test_data)
+        output$featureImportancePlot <- renderPlot({
+          req(res$model)
+          varImpPlot(res$model, main='Feature Importance Table for Random Forest Model')
+        })
       } else if (rv$model == 'logisticRegression') {
         rv$model_results <- createLogReg(rv$target_var, rv$train_data, rv$test_data)
+        output$featureCoefficientTable <- renderDT({
+          req(res$featureCoefficients)
+          datatable(res$featureCoefficients,
+                    options=list(pagelength=10,
+                                 scrollX=TRUE,
+                                 autowidth=TRUE,
+                                 search=list(regex=FALSE, caseInsensitive=TRUE),
+                                 searchCols=NULL),
+                    filter='top')
+        })
       } else if (rv$model == 'naiveBayes') {
         useKFold <- input$kFoldInput
         rv$model_results <- createNaiveBayes(rv$target_var, useKFold, rv$train_data, rv$test_data)
@@ -417,10 +436,6 @@ server <- function(input, output) {
         labs(title="Confusion Matrix Heatmap")
     })
     
-    output$featureImportancePlot <- renderPlot({
-      req(res$model)
-      varImpPlot(res$model, main='Feature Importance Table for Random Forest Model')
-    })
   })
 }
 

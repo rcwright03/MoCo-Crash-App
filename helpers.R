@@ -464,10 +464,21 @@ createLogReg <- function(targetVar, train_data, test_data) {
   by_class <- as.data.frame(cm$byClass)
   # print(cm) print for testing
   
+  # get feature coefficients
+  feature_coef <- as.data.frame(coef(lrModel))
+  feature_coef$class <- rownames(feature_coef)
+  feature_coef_long <- tidyr::pivot_longer(
+    feature_coef,
+    cols=-class,
+    names_to = "feature",
+    values_to = "coefficient"
+  )
+  
   list(
     cm_df = as.data.frame(cm$table),
     accuracy = as.numeric(cm$overall["Accuracy"]),
     kappa = as.numeric(cm$overall["Kappa"]),
+    featureCoefficients = feature_coef_long,
     macro_metrics = c(
       precision = mean(by_class$Precision, na.rm = TRUE),
       recall    = mean(by_class$Sensitivity, na.rm = TRUE),
