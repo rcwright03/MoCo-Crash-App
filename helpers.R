@@ -13,6 +13,7 @@ library(caret)
 library(e1071)
 library(naivebayes)
 library(class)
+library(FNN)
 
 crash_df = read.csv("Data/crash_data_truncated.csv")
 
@@ -627,8 +628,6 @@ extract_nb_categorical_probs <- function(model_obj) {
   probs_df[, c("class", "feature", "level", "probability")]
 }
 
-
-
 # knn model
 createKNN <- function(targetVar, kVal, train_data, test_data) {
   if (targetVar == "Injury_Severity"){
@@ -707,10 +706,27 @@ createKNN <- function(targetVar, kVal, train_data, test_data) {
   by_class <- as.data.frame(cm$byClass)
   # print(cm) print for testing
   
+  # get distances to nearest neighbor
+  nn <- get.knnx(
+    data = train_x,
+    query = test_x,
+    k = 1
+  )
+  
+  nn_distance <- nn$nn.dist[, 1]
+  correct <- knn_pred == test_data[[targetVar]]
+  
+  # create dataframe of distances
+  dist_df <- data.frame(
+    distance = nn_distance,
+    prediction = ifelse(correct, "Correct", "Incorrect")
+  )
+  
   list(
     cm_df = as.data.frame(cm$table),
     accuracy = as.numeric(cm$overall["Accuracy"]),
     kappa = as.numeric(cm$overall["Kappa"]),
+    distances = dist_df,
     macro_metrics = c(
       precision = mean(by_class$Precision, na.rm = TRUE),
       recall    = mean(by_class$Sensitivity, na.rm = TRUE),
@@ -781,8 +797,4 @@ createSVM <- function(targetVar, kernelType, costParam, train_data, test_data) {
 }
 
 # tables to display for each model
-# random forest: feature importance table
-# logistic regression: feature coefficient table
-# naive bayes: mean and variance per feature per class - top features per class
-# knn: graph of distance to nearest neighbors for correct vs incorrect predictions
 # svm: number of support vectors

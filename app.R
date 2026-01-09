@@ -254,6 +254,11 @@ ui <- dashboardPage(
               condition = "input.modelInput == 'naiveBayes'",
               br(),
               DTOutput('featureProbabilityTable')
+            ),
+            conditionalPanel(
+              condition = "input.modelInput == 'knn'",
+              br(),
+              plotOutput('distanceToNeighbors')
             )
           )
         )
@@ -419,6 +424,18 @@ server <- function(input, output) {
         })
       } else if (rv$model == 'knn') {
         rv$model_results <- createKNN(rv$target_var, input$kInput, rv$train_data, rv$test_data)
+        output$distanceToNeighbors <- renderPlot({
+          req(res$distances)
+          ggplot(res$distances, aes(x=distance, fill=prediction)) +
+            geom_density(alpha = 0.5) +
+            labs(
+              title = paste("Nearest Neighbor Distance:", rv$targetVar),
+              x = "Distance to Nearest Neighbor",
+              y = "Density",
+              fill = "Prediction"
+            ) +
+            theme_minimal()
+        })
       } else if (rv$model == 'svm') {
         rv$model_results <- createSVM(rv$target_var, input$kernelInput, input$costParam, rv$train_data, rv$test_data)
       }
